@@ -245,7 +245,7 @@ class AutoClicker:
     def create_icon(self):
         """Create and set the program icon"""
         try:
-            self.root.iconbitmap("autoclicker.ico")
+            self.root.iconbitmap("keyboard-mous.ico")
         except:
             pass
     
