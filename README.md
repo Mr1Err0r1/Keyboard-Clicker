@@ -10,6 +10,7 @@ A powerful automation tool that combines mouse click simulation with keyboard in
 
 ## 🚀 Features
 
+ 
 ### 🖱️ Mouse Automation
 - **Click Types**: Single, double, or hold clicks
 - **Button Selection**: Left, right, or middle mouse button
