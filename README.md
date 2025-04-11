@@ -1,17 +1,14 @@
-# Keyboard-Clicker
+# Keyboard Clicker
 
-This is an Auto-Clicker and Keyboard Presser tool built with Python and Tkinter. It automates mouse clicks (single/double/hold) and keyboard presses with customizable intervals, hotkeys, and position tracking. Ideal for gaming or repetitive tasks. Should work on Windows/Linux.
+![Keyboard Clicker Logo](assets/keyboard+mous.png)
 
-## 🚀 Kexyboard Autoclicker - Advanced Automation Tool
+A powerful automation tool that combines mouse click simulation with keyboard input automation. Designed for gamers, testers, and productivity enthusiasts who need precise control over repetitive tasks.
 
-![Icon](assets/keyboard-mous.ico)  
-*Precision automation for gaming and productivity*
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Version](https://img.shields.io/badge/version-1.3.0-green.svg)](https://github.com/Mr1Err0r1/Keyboard-Clicker/releases)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
-## 📌 Overview
-
-Kexyboard Autoclicker is a sophisticated automation tool that combines mouse click simulation with keyboard input automation. Designed for gamers, testers, and power users, it provides precise control over repetitive tasks with customizable timing, sequences, and hotkey triggers.
-
-## ✨ Key Features
+## 🚀 Features
 
 ### 🖱️ Mouse Automation
 - **Click Types**: Single, double, or hold clicks
@@ -30,111 +27,116 @@ Kexyboard Autoclicker is a sophisticated automation tool that combines mouse cli
 - **Collapsible UI**: Clean interface with expandable sections
 - **System Tray Mode**: Continues running when minimized
 
-## 📦 Installation
+## 📋 Requirements
 
-### Requirements
-- Python 3.8+
-- Windows or Linux (with X11 for Linux)
-- Required packages: `pynput`, `keyboard`, `pyautogui`, `tkinter`
+- Python 3.8 or higher
+- Windows, macOS, or Linux (with X11 for Linux)
+- Required packages:
+  - keyboard
+  - pyautogui
+  - tkinter (usually included with Python)
+
+## 🔧 Installation
+
+### From Source
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/Mr1Err0r1/Keyboard-Clicker.git
+   cd Keyboard-Clicker
+   ```
+
+2. Install the required dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. Run the application:
+   ```bash
+   python main.py
+   ```
+
+### Permissions
+
+- **Windows**: Run as administrator for global hotkeys
+- **Linux**: Install as root or use `sudo` for global hotkeys
+- **macOS**: Grant accessibility permissions in System Preferences
+
+## 📖 Usage Guide
+
+### Mouse Configuration
+
+1. Set the click interval (hours, minutes, seconds, milliseconds)
+2. Choose click options:
+   - Mouse button (Left, Right, Middle)
+   - Click type (Single, Double, Hold)
+3. Select repeat mode:
+   - Repeat until stopped
+   - Repeat specific number of times
+4. Choose cursor position:
+   - Current location
+   - Pick specific coordinates
+
+### Keyboard Sequences
+
+1. Expand the "Key Sequence" section
+2. Click "Pick Key" to select a key to automate
+3. Set individual intervals for each key (optional)
+4. Add up to 3 key sequences
+
+### Hotkeys
+
+- Default hotkeys: F6 (Start), F7 (Stop)
+- Customize hotkeys via "Hotkey settings" button
+
+## 🖼️ Screenshots
+
+![Main Interface](assets/keyboard+mous.png)
+
+## 🔄 Release Process
+
+### Creating a Release
+
+1. Update version number in `gui/app.py`
+2. Test all functionality
+3. Create a new tag:
+   ```bash
+   git tag -a v1.x.x -m "Version 1.x.x"
+   git push origin v1.x.x
+   ```
+4. Create a new release on GitHub:
+   - Go to the Releases page
+   - Click "Draft a new release"
+   - Select the tag
+   - Add release notes
+   - Attach compiled binaries if available
+
+### Release Notes
+
+Release notes should include:
+- New features
+- Bug fixes
+- Known issues
+- Breaking changes
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- [PyAutoGUI](https://pyautogui.readthedocs.io/) for mouse and keyboard automation
+- [keyboard](https://github.com/boppreh/keyboard) for global hotkey support
+- [Tkinter](https://docs.python.org/3/library/tkinter.html) for the GUI framework
 
 
-
-# Kexyboard Autoclicker - Advanced Automation Tool
-
-![Application Icon](assets/keyboard+mous.png)  
-*Precision automation for gaming and productivity*
-
-## Overview
-
-Kexyboard Autoclicker is a sophisticated automation tool that combines mouse click simulation with keyboard input automation. Designed for gamers, testers, and power users, it provides precise control over repetitive tasks with customizable timing, sequences, and hotkey triggers.
-
-## Key Features
-
-### Mouse Automation
-- **Click Types**: Single, double, or hold clicks
-- **Button Selection**: Left, right, or middle mouse button
-- **Position Control**: Current cursor position or specific coordinates
-- **Timing Control**: Adjustable intervals from milliseconds to hours
-
-### Keyboard Automation
-- **Multi-key Sequences**: Program up to 3 key sequences
-- **Independent Timing**: Unique intervals for each key press
-- **Hotkey Support**: Customizable start/stop triggers
-
-### Advanced Controls
-- **Repeat Modes**: Fixed count or continuous until stopped
-- **Visual Position Picker**: Real-time coordinate selection tool
-- **Collapsible UI**: Clean interface with expandable sections
-- **System Tray Mode**: Continues running when minimized
-
-## Installation
-
-### Requirements
-- Python 3.8+
-- Windows or Linux (with X11 for Linux)
-- Required packages: `pynput`, `keyboard`, `pyautogui`, `tkinter`
-
-## Usage Guide
-
-### Mouse Configuration:
-- Select click type and button
-- Set click interval and repeat mode
-- Choose cursor position (current or specific coordinates)
-
-### Keyboard Sequences:
-- Add up to 3 key sequences
-- Set individual intervals for each key
-- Use the "Pick Key" feature for easy binding
-
-### Hotkeys:
-- Default: F6 (Start), F7 (Stop)
-- Customizable through Hotkey Settings
-
-### Advanced Features:
-- Hold click duration configuration
-- Window remains active when minimized
-- Tooltip coordinate selector
-
-## Technical Details
-
-### Architecture
-- **GUI Framework**: Tkinter with ttk theming
-- **Input Handling**: pynput for mouse, keyboard for key events
-- **Multi-threading**: Separate threads for mouse and keyboard automation
-
-### File Structure
-
-Kexyboard_Autoclicker/
-├── assets/
-│   └── keyboard+mous.png
-├── gui/
-│   ├── app.py        # Main application class
-│   └── components.py # UI components
-├── main.py           # Entry point
-├── hotkeys.cfg       # Hotkey configuration
-└── README.md
-
-### Setup
-```bash
-# Clone repository
-git clone https://github.com/yourusername/Kexyboard_Autoclicker.git
-cd Kexyboard_Autoclicker
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run application
-python main.py
-
-
-### Setup
-```bash
-# Clone repository
-git clone https://github.com/yourusername/Kexyboard_Autoclicker.git
-cd Kexyboard_Autoclicker
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run application
-python main.py
