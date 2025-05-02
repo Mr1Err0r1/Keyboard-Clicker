@@ -1,0 +1,14 @@
+toml[package]
+name = "op_auto_clicker"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+eframe = "0.22.0"         # egui Framework für GUI
+egui = "0.22.0"           # UI-Bibliothek
+enigo = "0.1.2"           # Maus- und Tastatursteuerung
+rfd = "0.11.0"            # Dateidialoge
+serde = { version = "1.0", features = ["derive"] } # Serialisierung/Deserialisierung
+serde_json = "1.0"        # JSON-Verarbeitung
+global-hotkey = "0.2.3"   # Hotkey-Unterstützung
+device_query = "1.1.3"    # Geräteabfragen
