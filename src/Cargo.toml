@@ -1,4 +1,4 @@
-toml[package]
+[package]
 name = "op_auto_clicker"
 version = "0.1.0"
 edition = "2021"
@@ -10,5 +10,5 @@ enigo = "0.1.2"           # Maus- und Tastatursteuerung
 rfd = "0.11.0"            # Dateidialoge
 serde = { version = "1.0", features = ["derive"] } # Serialisierung/Deserialisierung
 serde_json = "1.0"        # JSON-Verarbeitung
-global-hotkey = "0.2.3"   # Hotkey-Unterstützung
+global_hotkey = "0.2.3"   # Hotkey-Unterstützung
 device_query = "1.1.3"    # Geräteabfragen

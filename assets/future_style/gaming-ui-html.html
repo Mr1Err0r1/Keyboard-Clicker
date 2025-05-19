@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gaming Overlay</title>
+    <style>
+        :root {
+            --dark-theme-bg: rgba(25, 28, 37, 0.85);
+            --dark-theme-header: rgb(45, 48, 56);
+            --red-theme-bg: rgba(40, 10, 10, 0.85);
+            --red-theme-header: rgb(70, 20, 20);
+            --blue-theme-bg: rgba(10, 20, 40, 0.85);
+            --blue-theme-header: rgb(20, 30, 60);
+            --accent-color: rgb(0, 174, 255);
+            --accent-glow: 0 0 10px rgba(0, 174, 255, 0.7);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #333;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            gap: 20px;
+        }
+
+        .overlay-window {
+            width: 320px;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            background-color: var(--dark-theme-bg);
+            transition: all 0.3s ease;
+        }
+
+        .window-header {
+            background-color: var(--dark-theme-header);
+            padding: 10px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+            height: 30px;
+        }
+
+        /* Gaming-Stil Header mit diagonalen Streifen */
+        .window-header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 10px,
+                rgba(255, 255, 255, 0.05) 10px,
+                rgba(255, 255, 255, 0.05) 20px
+            );
+            z-index: 0;
+        }
+
+        .window-title {
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 14px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .window-controls {
+            display: flex;
+            gap: 10px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .window-content {
+            padding: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .control-btn {
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+        }
+
+        .close-btn {
+            background-color: #ff5f57;
+        }
+
+        .minimize-btn {
+            background-color: #ffbd2e;
+        }
+
+        /* Akzent-Linie unter dem Header */
+        .accent-line {
+            height: 2px;
+            background-color: var(--accent-color);
+            box-shadow: var(--accent-glow);
+        }
+
+        /* Verschiedene Themes */
+        .dark-theme {
+            background-color: var(--dark-theme-bg);
+        }
+        
+        .dark-theme .window-header {
+            background-color: var(--dark-theme-header);
+        }
+        
+        .red-theme {
+            background-color: var(--red-theme-bg);
+        }
+        
+        .red-theme .window-header {
+            background-color: var(--red-theme-header);
+        }
+        
+        .red-theme .accent-line {
+            background-color: #ff3e3e;
+            box-shadow: 0 0 10px rgba(255, 62, 62, 0.7);
+        }
+        
+        .blue-theme {
+            background-color: var(--blue-theme-bg);
+        }
+        
+        .blue-theme .window-header {
+            background-color: var(--blue-theme-header);
+        }
+
+        /* Cool Gaming HUD Element */
+        .hud-element {
+            border: 1px solid var(--accent-color);
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 10px;
+            position: relative;
+        }
+
+        .hud-element::before {
+            content: '';
+            position: absolute;
+            top: -1px;
+            left: -1px;
+            width: 10px;
+            height: 10px;
+            border-top: 2px solid var(--accent-color);
+            border-left: 2px solid var(--accent-color);
+        }
+
+        .hud-element::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            right: -1px;
+            width: 10px;
+            height: 10px;
+            border-bottom: 2px solid var(--accent-color);
+            border-right: 2px solid var(--accent-color);
+        }
+
+        /* Theme wechseln Button */
+        .theme-controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .theme-btn {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+
+        .dark-btn {
+            background-color: #2d3038;
+            color: white;
+        }
+
+        .red-btn {
+            background-color: #6e2424;
+            color: white;
+        }
+
+        .blue-btn {
+            background-color: #24456e;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <!-- Dark Theme Fenster -->
+    <div class="overlay-window dark-theme" id="window1">
+        <div class="window-header">
+            <div class="window-title">Performance Monitor</div>
+            <div class="window-controls">
+                <button class="control-btn minimize-btn"></button>
+                <button class="control-btn close-btn"></button>
+            </div>
+        </div>
+        <div class="accent-line"></div>
+        <div class="window-content">
+            <div class="hud-element">
+                <h3>CPU: 45%</h3>
+                <div class="progress-bar">
+                    <div class="progress" style="width: 45%"></div>
+                </div>
+            </div>
+            <div class="hud-element">
+                <h3>RAM: 6.2 GB</h3>
+                <div class="progress-bar">
+                    <div class="progress" style="width: 60%"></div>
+                </div>
+            </div>
+            <div class="hud-element">
+                <h3>GPU: 78%</h3>
+                <div class="progress-bar">
+                    <div class="progress" style="width: 78%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Red Theme Fenster -->
+    <div class="overlay-window red-theme" id="window2">
+        <div class="window-header">
+            <div class="window-title">Chat</div>
+            <div class="window-controls">
+                <button class="control-btn minimize-btn"></button>
+                <button class="control-btn close-btn"></button>
+            </div>
+        </div>
+        <div class="accent-line"></div>
+        <div class="window-content">
+            <div class="hud-element">
+                <p><strong>Player1:</strong> Hab das Level geschafft!</p>
+            </div>
+            <div class="hud-element">
+                <p><strong>Player2:</strong> Coole Sache, wie hast du den Boss besiegt?</p>
+            </div>
+            <div class="hud-element">
+                <p><strong>Player1:</strong> Mit dem neuen Schwert aus dem Shop</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Blue Theme Fenster -->
+    <div class="overlay-window blue-theme" id="window3">
+        <div class="window-header">
+            <div class="window-title">Einstellungen</div>
+            <div class="window-controls">
+                <button class="control-btn minimize-btn"></button>
+                <button class="control-btn close-btn"></button>
+            </div>
+        </div>
+        <div class="accent-line"></div>
+        <div class="window-content">
+            <div class="hud-element">
+                <h3>Grafikqualität</h3>
+                <select>
+                    <option>Niedrig</option>
+                    <option>Mittel</option>
+                    <option selected>Hoch</option>
+                    <option>Ultra</option>
+                </select>
+            </div>
+            <div class="hud-element">
+                <h3>Lautstärke</h3>
+                <input type="range" min="0" max="100" value="75">
+            </div>
+            <div class="hud-element">
+                <h3>FPS Limit</h3>
+                <input type="number" value="144">
+            </div>
+        </div>
+    </div>
+
+    <div class="theme-controls">
+        <button class="theme-btn dark-btn" onclick="changeTheme('dark')">Dark Theme</button>
+        <button class="theme-btn red-btn" onclick="changeTheme('red')">Red Theme</button>
+        <button class="theme-btn blue-btn" onclick="changeTheme('blue')">Blue Theme</button>
+    </div>
+
+    <script>
+        function changeTheme(theme) {
+            // Diese Funktion könnte in deiner Rust-Anwendung die Themes aller Fenster ändern
+            const windows = document.querySelectorAll('.overlay-window');
+            
+            windows.forEach(window => {
+                window.classList.remove('dark-theme', 'red-theme', 'blue-theme');
+                window.classList.add(`${theme}-theme`);
+            });
+        }
+
+        // Demo-Funktionalität für die Buttons
+        document.querySelectorAll('.close-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                this.closest('.overlay-window').style.display = 'none';
+            });
+        });
+
+        document.querySelectorAll('.minimize-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const content = this.closest('.overlay-window').querySelector('.window-content');
+                content.style.display = content.style.display === 'none' ? 'block' : 'none';
+            });
+        });
+    </script>
+</body>
+</html>
