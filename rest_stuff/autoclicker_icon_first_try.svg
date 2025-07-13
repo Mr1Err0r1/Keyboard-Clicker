@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Background circle -->
+  <circle cx="50" cy="50" r="45" fill="#3498db" />
+  <circle cx="50" cy="50" r="40" fill="#2980b9" />
+  
+  <!-- Mouse cursor -->
+  <path d="M30 25 L50 60 L45 60 L55 75 L60 72 L50 58 L55 58 Z" fill="white" stroke="black" stroke-width="1" />
+  
+  <!-- Geometric click ripples -->
+  <circle cx="50" cy="60" r="5" fill="none" stroke="white" stroke-width="2" opacity="0.7" />
+  <circle cx="50" cy="60" r="10" fill="none" stroke="white" stroke-width="1.5" opacity="0.5" />
+  <circle cx="50" cy="60" r="15" fill="none" stroke="white" stroke-width="1" opacity="0.3" />
+  
+  <!-- Orbital rings representing automation -->
+  <ellipse cx="50" cy="50" rx="35" ry="20" fill="none" stroke="white" stroke-width="1" opacity="0.5" transform="rotate(30 50 50)" />
+  <ellipse cx="50" cy="50" rx="35" ry="20" fill="none" stroke="white" stroke-width="1" opacity="0.5" transform="rotate(150 50 50)" />
+  
+  <!-- Border -->
+  <circle cx="50" cy="50" r="45" fill="none" stroke="#1a5276" stroke-width="2" />
+</svg>
