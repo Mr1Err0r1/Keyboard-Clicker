@@ -1,5 +1,6 @@
 import tkinter.ttk as ttk
 import tkinter as tk
+from .components import CollapsibleSection
 class CollapsibleSection(ttk.Frame):
     def __init__(self, parent, title, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
