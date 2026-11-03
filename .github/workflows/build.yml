@@ -100,4 +100,9 @@ jobs:
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
+          name: Keyboard Clicker ${{ github.ref_name }}
           files: keyboard-clicker-*
+          body_path: .github/release-notes/${{ github.ref_name }}.md
+          draft: false
+          prerelease: false
+          make_latest: true

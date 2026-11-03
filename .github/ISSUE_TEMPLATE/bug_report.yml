@@ -1,0 +1,47 @@
+name: Bug report
+description: Report a reproducible defect in Keyboard Clicker.
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Please check existing issues first. Do not include credentials or private data.
+  - type: input
+    id: version
+    attributes:
+      label: App version or commit
+      placeholder: v2.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Windows 10 x64
+        - Windows 11 x64
+        - Linux x86_64 (X11)
+        - Linux (Wayland)
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Describe the shortest sequence that reproduces the issue.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and logs
+      description: Remove personal information before sharing logs.
+    validations:
+      required: true

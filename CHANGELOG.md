@@ -2,7 +2,7 @@
 
 This project follows Semantic Versioning. Each published release should include tested Windows and Linux artifacts.
 
-## [2.0.0] - Unreleased
+## [2.0.0] - 2026-11-03
 
 ### Added
 - Independent Rust desktop application alongside the preserved Python app.

@@ -1,56 +1,68 @@
 # Keyboard Clicker
 
-A cross-platform mouse and keyboard automation application. The repository keeps the original Python application and adds a separate Rust desktop application.
+[![Build](https://github.com/Mr1Err0r1/Keyboard-Clicker/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/Mr1Err0r1/Keyboard-Clicker/actions/workflows/build.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## Rust edition
+A cross-platform mouse and keyboard automation tool. The repository preserves the original Python application and provides a separate native Rust desktop application for Windows and Linux.
 
-The Rust application targets Windows 10/11 and Linux. It uses a native desktop interface and stores settings in the current user's configuration directory. The default UI language is English. German and Russian are included.
+## Downloads
 
-### Action sequences
+Get stable, versioned builds from [GitHub Releases](https://github.com/Mr1Err0r1/Keyboard-Clicker/releases). Windows downloads are ZIP files containing a portable x64 `.exe`; Linux downloads are x86_64 tarballs. Development builds are published as short-lived artifacts on the [Actions page](https://github.com/Mr1Err0r1/Keyboard-Clicker/actions) and are retained for 14 days.
 
-Build a sequence from any combination of mouse clicks, named key presses, text entry, and waits. Actions run from top to bottom, can be enabled or disabled, reordered, and repeated as a complete cycle. Set a finite repeat count or use `0` to continue until stopped. F6 starts and F7 stops by default. Change both global hotkeys under Appearance; modifier combinations such as `Ctrl+F6` are supported.
+The Windows executable is currently unsigned. Depending on Windows SmartScreen reputation and local policy, Windows may show a first-run warning. Use only releases from this repository and review the release checksums before running downloaded files.
 
-The input worker is separate from the UI. Stop requests interrupt waits quickly, and held mouse or keyboard inputs are released before the worker exits.
+## Rust application
 
-### Appearance and languages
+The Rust app targets 64-bit Windows 10/11 and x86_64 Linux. The default interface language is English; German and Russian are included. The input worker runs separately from the UI and responds promptly to stop requests during waits.
 
-Choose a light or dark theme and set a custom accent color with a six-digit HEX value. To add a language, place a UTF-8 JSON file such as `pt-BR.json` in the `locales` directory inside the app's user configuration folder. Use `locales/en.json` as the key reference. Missing translation keys fall back to English. Restart the app after adding a translation.
+### Build automation sequences
 
-User settings are stored in `settings.json` in that same per-user configuration directory. The settings format is JSON and does not require administrator permissions.
+Combine mouse clicks, named key presses, text entry, and timed waits in one ordered sequence. Enable or disable individual steps, reorder them, and set delays. Repeat a sequence a chosen number of times, or set the count to `0` to continue until stopped. Mouse actions support left, right, and middle buttons, single/double clicks, held clicks, and optional fixed screen coordinates.
+
+The default global hotkeys are F6 to start and F7 to stop. Change them in Appearance; single keys and modifier combinations such as `Ctrl+F6` are supported. The start and stop shortcuts must be different. Start and Stop buttons remain available in the window if the desktop session does not allow global shortcuts.
+
+### Appearance, languages, and settings
+
+Choose a dark or light theme and set a custom six-digit HEX accent color. To add a language, place a UTF-8 JSON file such as `pt-BR.json` in the `locales` folder under the app's configuration directory. Use [`locales/en.json`](locales/en.json) as the key reference. Missing translation keys fall back to English; restart the app after adding a language.
+
+Settings are stored in `settings.json` under `KeyboardClicker` in the current user's configuration directory: normally `%APPDATA%\KeyboardClicker` on Windows and `$XDG_CONFIG_HOME/KeyboardClicker` (usually `~/.config/KeyboardClicker`) on Linux. No administrator privileges are required.
+
+### Platform notes
+
+On Windows, use the x64 executable on Windows 10 or 11. On Linux, input simulation currently uses the X11 input path; Wayland-native behavior varies by compositor and may be restricted. Global hotkeys can also depend on desktop-session permissions. The published Linux tarball contains the application binary, not a copy of your system libraries.
 
 ### Build from source
 
-Install Rust stable and the native build dependencies for your Linux distribution. On Ubuntu/Debian, install:
+Install Rust stable. On Ubuntu/Debian, install the native build dependencies:
 
 ```bash
+sudo apt-get update
 sudo apt-get install libgtk-3-dev libxdo-dev libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev pkg-config
 ```
 
-Then build and test:
+Then run the quality checks and build:
 
 ```bash
 cargo fmt --all -- --check
 cargo test --locked
+cargo clippy --all-targets --locked -- -D warnings
 cargo build --release --locked
 ```
 
-The release binary is written to `target/release/keyboard-clicker` on Linux or `target/release/keyboard-clicker.exe` on Windows. GitHub Actions builds and tests both platforms. Push a semantic version tag such as `v2.0.0` to create a GitHub Release with platform archives.
+The binary is written to `target/release/keyboard-clicker` on Linux and `target/release/keyboard-clicker.exe` on Windows. GitHub Actions tests both systems. Pushing a semantic version tag such as `v2.0.0` builds x86_64 Windows and Linux release archives and attaches them to a GitHub Release. See [`CHANGELOG.md`](CHANGELOG.md) and the version-matched notes under [`.github/release-notes`](.github/release-notes).
 
-Linux input automation and global hotkeys depend on the desktop session. X11 is the supported path for input simulation. Wayland-native behavior varies by compositor and may be restricted. The application still provides Start and Stop controls in its window.
+## Original Python application
 
-## Original Python edition
-
-The original Python application remains in the repository and can still be started independently:
+The existing Python files remain available and are not replaced by the Rust app. To run that edition:
 
 ```bash
 python -m pip install -r requirements.txt
 python main.py
 ```
 
-## Inspiration and licensing
+## Contributing and security
 
-The Rust edition is an independent implementation. The project takes high-level product inspiration from [Blur Auto Clicker](https://github.com/Blur009/Blur-AutoClicker), but does not copy its source code or assets. The reference project is GPL-3.0; this repository's original project license remains in `LICENSE`.
+Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a pull request. Please report security issues privately using the process in [`SECURITY.md`](SECURITY.md), rather than publishing exploit details in an issue.
 
-## License
+## Inspiration and license
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE).
+The Rust application is an independent implementation. It takes high-level product inspiration from [Blur Auto Clicker](https://github.com/Blur009/Blur-AutoClicker); it does not copy that project's source code or assets. This project is distributed under the MIT License; see [`LICENSE`](LICENSE).
