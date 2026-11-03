@@ -1,143 +1,56 @@
 # Keyboard Clicker
 
-![Keyboard Clicker Logo](assets/keyboard+mous.png)
+A cross-platform mouse and keyboard automation application. The repository keeps the original Python application and adds a separate Rust desktop application.
 
-A powerful automation tool that combines mouse click simulation with keyboard input automation. Designed for gamers, testers, and productivity enthusiasts who need precise control over repetitive tasks.
+## Rust edition
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-1.3.0-green.svg)](https://github.com/Mr1Err0r1/Keyboard-Clicker/releases)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+The Rust application targets Windows 10/11 and Linux. It uses a native desktop interface and stores settings in the current user's configuration directory. The default UI language is English. German and Russian are included.
 
-## 🚀 Features
+### Action sequences
 
- 
-### 🖱️ Mouse Automation
-- **Click Types**: Single, double, or hold clicks
-- **Button Selection**: Left, right, or middle mouse button
-- **Position Control**: Current cursor position or specific coordinates
-- **Timing Control**: Adjustable intervals from milliseconds to hours
+Build a sequence from any combination of mouse clicks, named key presses, text entry, and waits. Actions run from top to bottom, can be enabled or disabled, reordered, and repeated as a complete cycle. Set a finite repeat count or use `0` to continue until stopped. F6 starts and F7 stops by default. Change both global hotkeys under Appearance; modifier combinations such as `Ctrl+F6` are supported.
 
-### ⌨️ Keyboard Automation
-- **Multi-key Sequences**: Program up to 3 key sequences
-- **Independent Timing**: Unique intervals for each key press
-- **Hotkey Support**: Customizable start/stop triggers
+The input worker is separate from the UI. Stop requests interrupt waits quickly, and held mouse or keyboard inputs are released before the worker exits.
 
-### ⚙️ Advanced Controls
-- **Repeat Modes**: Fixed count or continuous until stopped
-- **Visual Position Picker**: Real-time coordinate selection tool
-- **Collapsible UI**: Clean interface with expandable sections
-- **System Tray Mode**: Continues running when minimized
+### Appearance and languages
 
-## 📋 Requirements
+Choose a light or dark theme and set a custom accent color with a six-digit HEX value. To add a language, place a UTF-8 JSON file such as `pt-BR.json` in the `locales` directory inside the app's user configuration folder. Use `locales/en.json` as the key reference. Missing translation keys fall back to English. Restart the app after adding a translation.
 
-- Python 3.8 or higher
-- Windows, macOS, or Linux (with X11 for Linux)
-- Required packages:
-  - keyboard
-  - pyautogui
-  - tkinter (usually included with Python)
+User settings are stored in `settings.json` in that same per-user configuration directory. The settings format is JSON and does not require administrator permissions.
 
-## 🔧 Installation
+### Build from source
 
-### From Source
+Install Rust stable and the native build dependencies for your Linux distribution. On Ubuntu/Debian, install:
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/Mr1Err0r1/Keyboard-Clicker.git
-   cd Keyboard-Clicker
-   ```
+```bash
+sudo apt-get install libgtk-3-dev libxdo-dev libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev pkg-config
+```
 
-2. Install the required dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+Then build and test:
 
-3. Run the application:
-   ```bash
-   python main.py
-   ```
+```bash
+cargo fmt --all -- --check
+cargo test --locked
+cargo build --release --locked
+```
 
-### Permissions
+The release binary is written to `target/release/keyboard-clicker` on Linux or `target/release/keyboard-clicker.exe` on Windows. GitHub Actions builds and tests both platforms. Push a semantic version tag such as `v2.0.0` to create a GitHub Release with platform archives.
 
-- **Windows**: Run as administrator for global hotkeys
-- **Linux**: Install as root or use `sudo` for global hotkeys
-- **macOS**: Grant accessibility permissions in System Preferences
+Linux input automation and global hotkeys depend on the desktop session. X11 is the supported path for input simulation. Wayland-native behavior varies by compositor and may be restricted. The application still provides Start and Stop controls in its window.
 
-## 📖 Usage Guide
+## Original Python edition
 
-### Mouse Configuration
+The original Python application remains in the repository and can still be started independently:
 
-1. Set the click interval (hours, minutes, seconds, milliseconds)
-2. Choose click options:
-   - Mouse button (Left, Right, Middle)
-   - Click type (Single, Double, Hold)
-3. Select repeat mode:
-   - Repeat until stopped
-   - Repeat specific number of times
-4. Choose cursor position:
-   - Current location
-   - Pick specific coordinates
+```bash
+python -m pip install -r requirements.txt
+python main.py
+```
 
-### Keyboard Sequences
+## Inspiration and licensing
 
-1. Expand the "Key Sequence" section
-2. Click "Pick Key" to select a key to automate
-3. Set individual intervals for each key (optional)
-4. Add up to 3 key sequences
+The Rust edition is an independent implementation. The project takes high-level product inspiration from [Blur Auto Clicker](https://github.com/Blur009/Blur-AutoClicker), but does not copy its source code or assets. The reference project is GPL-3.0; this repository's original project license remains in `LICENSE`.
 
-### Hotkeys
+## License
 
-- Default hotkeys: F6 (Start), F7 (Stop)
-- Customize hotkeys via "Hotkey settings" button
-
-## 🖼️ Screenshots
-
-![Main Interface](assets/keyboard+mous.png)
-
-## 🔄 Release Process
-
-### Creating a Release
-
-1. Update version number in `gui/app.py`
-2. Test all functionality
-3. Create a new tag:
-   ```bash
-   git tag -a v1.x.x -m "Version 1.x.x"
-   git push origin v1.x.x
-   ```
-4. Create a new release on GitHub:
-   - Go to the Releases page
-   - Click "Draft a new release"
-   - Select the tag
-   - Add release notes
-   - Attach compiled binaries if available
-
-### Release Notes
-
-Release notes should include:
-- New features
-- Bug fixes
-- Known issues
-- Breaking changes
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- [PyAutoGUI](https://pyautogui.readthedocs.io/) for mouse and keyboard automation
-- [keyboard](https://github.com/boppreh/keyboard) for global hotkey support
-- [Tkinter](https://docs.python.org/3/library/tkinter.html) for the GUI framework
-
-
+This project is licensed under the MIT License. See [LICENSE](LICENSE).
