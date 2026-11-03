@@ -1,7 +1,7 @@
 use crate::config;
 use std::{collections::BTreeMap, fs};
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct Catalog {
     languages: BTreeMap<String, BTreeMap<String, String>>,
 }
