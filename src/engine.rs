@@ -164,8 +164,19 @@ fn execute(enigo: &mut Enigo, action: &Action, state: &EngineState) {
                 }
             }
         }
+        Action::MouseMove { position } => {
+            enigo.mouse_move_to(position[0], position[1]);
+        }
         Action::KeyPress { key, hold_ms } => {
-            if let Some(key_code) = to_enigo_key(key) {
+            if let Some(keys) = to_enigo_combo(key) {
+                for key_code in &keys {
+                    enigo.key_down(*key_code);
+                }
+                sleep_interruptible(Duration::from_millis((*hold_ms).max(1)), state);
+                for key_code in keys.into_iter().rev() {
+                    enigo.key_up(key_code);
+                }
+            } else if let Some(key_code) = to_enigo_key(key) {
                 enigo.key_down(key_code);
                 sleep_interruptible(Duration::from_millis((*hold_ms).max(1)), state);
                 enigo.key_up(key_code);
@@ -198,6 +209,14 @@ fn to_enigo_button(button: MouseButton) -> EnigoMouseButton {
         MouseButton::Right => EnigoMouseButton::Right,
         MouseButton::Middle => EnigoMouseButton::Middle,
     }
+}
+
+fn to_enigo_combo(name: &str) -> Option<Vec<Key>> {
+    let parts: Vec<_> = name.split('+').map(str::trim).collect();
+    if parts.len() < 2 || parts.iter().any(|part| part.is_empty()) {
+        return None;
+    }
+    parts.into_iter().map(to_enigo_key).collect()
 }
 
 fn to_enigo_key(name: &str) -> Option<Key> {
@@ -255,6 +274,15 @@ mod tests {
         assert_eq!(to_enigo_key("space"), Some(Key::Space));
         assert_eq!(to_enigo_key("a"), Some(Key::Layout('a')));
         assert_eq!(to_enigo_key("unknown long key"), None);
+    }
+
+    #[test]
+    fn recognizes_modifier_combinations_as_ordered_keys() {
+        assert_eq!(
+            to_enigo_combo("Ctrl+A"),
+            Some(vec![Key::Control, Key::Layout('A')])
+        );
+        assert!(to_enigo_combo("Ctrl+").is_none());
     }
 
     #[test]

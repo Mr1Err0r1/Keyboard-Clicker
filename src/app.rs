@@ -2,7 +2,7 @@ use crate::{
     config,
     engine::{AutomationEngine, EngineState},
     i18n::Catalog,
-    model::{Action, AppSettings, ClickType, MouseButton, SequenceStep},
+    model::{Action, AppSettings, ClickType, MouseButton, SequenceStep, MAX_SEQUENCE_STEPS},
     theme,
 };
 use eframe::egui::{self, Color32, RichText};
@@ -82,6 +82,67 @@ impl ClickerApp {
         self.engine.stop();
     }
 
+    fn export_settings(&mut self) {
+        if let Err(key) = validate_settings_file(&self.settings, &self.catalog) {
+            self.message = Some((self.tr(key), true));
+            return;
+        }
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("JSON settings", &["json"])
+            .set_file_name("keyboard-clicker-settings.json")
+            .save_file()
+        else {
+            return;
+        };
+        self.message = Some(match config::export_to(&path, &self.settings) {
+            Ok(()) => (
+                format!("{}: {}", self.tr("exported"), path.display()),
+                false,
+            ),
+            Err(error) => (error.to_string(), true),
+        });
+    }
+
+    fn import_settings(&mut self) {
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("JSON settings", &["json"])
+            .pick_file()
+        else {
+            return;
+        };
+        let imported = match config::import_from(&path) {
+            Ok(settings) => settings,
+            Err(_) => {
+                self.message = Some((self.tr("invalid_settings_file"), true));
+                return;
+            }
+        };
+        if let Err(key) = validate_settings_file(&imported, &self.catalog) {
+            self.message = Some((self.tr(key), true));
+            return;
+        }
+
+        let previous = self.settings.clone();
+        self.settings = imported;
+        match self
+            .configure_hotkeys()
+            .and_then(|()| config::save(&self.settings).map_err(|error| error.to_string()))
+        {
+            Ok(()) => {
+                self.dirty = false;
+                self.message = Some((
+                    format!("{}: {}", self.tr("imported"), path.display()),
+                    false,
+                ));
+            }
+            Err(error) => {
+                self.settings = previous;
+                let _ = self.configure_hotkeys();
+                self.message = Some((error, true));
+            }
+        }
+    }
+
     fn configure_hotkeys(&mut self) -> Result<(), String> {
         let (start, stop) = parse_hotkey_pair(&self.settings)?;
         let Some(manager) = self.hotkey_manager.as_ref() else {
@@ -121,7 +182,7 @@ impl ClickerApp {
     }
 
     fn draw_automation(&mut self, ui: &mut egui::Ui) {
-        let catalog = &self.catalog;
+        let catalog = self.catalog.clone();
         let locale = self.settings.locale.clone();
         let tr = |key: &str| catalog.text(&locale, key);
         ui.horizontal(|ui| {
@@ -184,40 +245,59 @@ impl ClickerApp {
         });
         ui.add_space(14.0);
         ui.separator();
-        ui.horizontal(|ui| {
+        ui.vertical(|ui| {
             ui.heading(tr("sequence_title"));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.add_enabled_ui(!locked, |ui| {
-                    if ui.button(tr("add_wait")).clicked() {
-                        self.settings.sequence.push(SequenceStep {
-                            action: Action::Wait { duration_ms: 250 },
-                            ..Default::default()
-                        });
-                        self.dirty = true;
+            ui.add_space(4.0);
+            ui.add_enabled_ui(!locked, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    if ui.button(tr("import_settings")).clicked() {
+                        self.import_settings();
                     }
-                    if ui.button(tr("add_text")).clicked() {
-                        self.settings.sequence.push(SequenceStep {
-                            action: Action::TypeText {
-                                text: String::new(),
-                            },
-                            ..Default::default()
-                        });
-                        self.dirty = true;
+                    if ui.button(tr("export_settings")).clicked() {
+                        self.export_settings();
                     }
-                    if ui.button(tr("add_key")).clicked() {
-                        self.settings.sequence.push(SequenceStep {
-                            action: Action::KeyPress {
-                                key: "Space".into(),
-                                hold_ms: 35,
-                            },
-                            ..Default::default()
-                        });
-                        self.dirty = true;
-                    }
-                    if ui.button(tr("add_click")).clicked() {
-                        self.settings.sequence.push(SequenceStep::default());
-                        self.dirty = true;
-                    }
+                    ui.separator();
+                    ui.add_enabled_ui(self.settings.sequence.len() < MAX_SEQUENCE_STEPS, |ui| {
+                        if ui.button(tr("add_wait")).clicked() {
+                            self.settings.sequence.push(SequenceStep {
+                                action: Action::Wait { duration_ms: 250 },
+                                ..Default::default()
+                            });
+                            self.dirty = true;
+                        }
+                        if ui.button(tr("add_text")).clicked() {
+                            self.settings.sequence.push(SequenceStep {
+                                action: Action::TypeText {
+                                    text: String::new(),
+                                },
+                                ..Default::default()
+                            });
+                            self.dirty = true;
+                        }
+                        if ui.button(tr("add_key")).clicked() {
+                            self.settings.sequence.push(SequenceStep {
+                                action: Action::KeyPress {
+                                    key: "Space".into(),
+                                    hold_ms: 35,
+                                },
+                                ..Default::default()
+                            });
+                            self.dirty = true;
+                        }
+                        if ui.button(tr("add_click")).clicked() {
+                            self.settings.sequence.push(SequenceStep::default());
+                            self.dirty = true;
+                        }
+                        if ui.button(tr("add_move")).clicked() {
+                            self.settings.sequence.push(SequenceStep {
+                                action: Action::MouseMove {
+                                    position: [500, 350],
+                                },
+                                ..Default::default()
+                            });
+                            self.dirty = true;
+                        }
+                    });
                 });
             });
         });
@@ -233,125 +313,187 @@ impl ClickerApp {
                     let mut move_down = false;
                     let mut remove = false;
                     let step = &mut self.settings.sequence[index];
-                    egui::CollapsingHeader::new(format!("{} {:02}", tr("step"), index + 1))
-                        .id_source(("step", index))
-                        .default_open(true)
-                        .show(ui, |ui| {
-                            ui.add_enabled_ui(!locked, |ui| {
-                                ui.horizontal(|ui| {
-                                    if ui.checkbox(&mut step.enabled, tr("enabled")).changed() {
+                    let action_title = match &step.action {
+                        Action::MouseClick { .. } => tr("add_click"),
+                        Action::MouseMove { .. } => tr("add_move"),
+                        Action::KeyPress { .. } => tr("add_key"),
+                        Action::TypeText { .. } => tr("add_text"),
+                        Action::Wait { .. } => tr("add_wait"),
+                    };
+                    ui.horizontal_top(|ui| {
+                        ui.vertical_centered(|ui| {
+                            ui.label(
+                                RichText::new(format!("{:02}", index + 1))
+                                    .color(Color32::from_rgb(108, 140, 255))
+                                    .strong(),
+                            );
+                            if index + 1 < count {
+                                ui.label(
+                                    RichText::new("│")
+                                        .color(Color32::from_rgb(108, 140, 255))
+                                        .size(19.0),
+                                );
+                            }
+                        });
+                        egui::Frame::group(ui.style()).show(ui, |ui| {
+                            egui::CollapsingHeader::new(format!(
+                                "{} · {}",
+                                tr("step"),
+                                action_title
+                            ))
+                            .id_source(("step", index))
+                            .default_open(true)
+                            .show(ui, |ui| {
+                                ui.add_enabled_ui(!locked, |ui| {
+                                    ui.horizontal(|ui| {
+                                        if ui.checkbox(&mut step.enabled, tr("enabled")).changed() {
+                                            self.dirty = true;
+                                        }
+                                        ui.with_layout(
+                                            egui::Layout::right_to_left(egui::Align::Center),
+                                            |ui| {
+                                                if ui
+                                                    .add_enabled(
+                                                        count > 1,
+                                                        egui::Button::new(tr("remove")),
+                                                    )
+                                                    .clicked()
+                                                {
+                                                    remove = true;
+                                                }
+                                                if index + 1 < count
+                                                    && ui
+                                                        .button("↓")
+                                                        .on_hover_text(tr("move_down"))
+                                                        .clicked()
+                                                {
+                                                    move_down = true;
+                                                }
+                                                if index > 0
+                                                    && ui
+                                                        .button("↑")
+                                                        .on_hover_text(tr("move_up"))
+                                                        .clicked()
+                                                {
+                                                    move_up = true;
+                                                }
+                                            },
+                                        );
+                                    });
+                                    let current = match &step.action {
+                                        Action::MouseClick { .. } => 0,
+                                        Action::MouseMove { .. } => 1,
+                                        Action::KeyPress { .. } => 2,
+                                        Action::TypeText { .. } => 3,
+                                        Action::Wait { .. } => 4,
+                                    };
+                                    let mut selected = current;
+                                    ui.horizontal(|ui| {
+                                        egui::ComboBox::from_id_source(("action", index))
+                                            .selected_text(match current {
+                                                0 => tr("add_click"),
+                                                1 => tr("add_move"),
+                                                2 => tr("add_key"),
+                                                3 => tr("add_text"),
+                                                _ => tr("add_wait"),
+                                            })
+                                            .show_ui(ui, |ui| {
+                                                ui.selectable_value(
+                                                    &mut selected,
+                                                    0,
+                                                    tr("add_click"),
+                                                );
+                                                ui.selectable_value(
+                                                    &mut selected,
+                                                    1,
+                                                    tr("add_move"),
+                                                );
+                                                ui.selectable_value(
+                                                    &mut selected,
+                                                    2,
+                                                    tr("add_key"),
+                                                );
+                                                ui.selectable_value(
+                                                    &mut selected,
+                                                    3,
+                                                    tr("add_text"),
+                                                );
+                                                ui.selectable_value(
+                                                    &mut selected,
+                                                    4,
+                                                    tr("add_wait"),
+                                                );
+                                            });
+                                    });
+                                    if selected != current {
+                                        step.action = match selected {
+                                            0 => Action::default(),
+                                            1 => Action::MouseMove {
+                                                position: [500, 350],
+                                            },
+                                            2 => Action::KeyPress {
+                                                key: "Space".into(),
+                                                hold_ms: 35,
+                                            },
+                                            3 => Action::TypeText {
+                                                text: String::new(),
+                                            },
+                                            _ => Action::Wait { duration_ms: 250 },
+                                        };
                                         self.dirty = true;
                                     }
-                                    ui.with_layout(
-                                        egui::Layout::right_to_left(egui::Align::Center),
-                                        |ui| {
-                                            if ui.button(tr("remove")).clicked() {
-                                                remove = true;
-                                            }
-                                            if index + 1 < count
-                                                && ui
-                                                    .button("↓")
-                                                    .on_hover_text(tr("move_down"))
-                                                    .clicked()
-                                            {
-                                                move_down = true;
-                                            }
-                                            if index > 0
-                                                && ui
-                                                    .button("↑")
-                                                    .on_hover_text(tr("move_up"))
-                                                    .clicked()
-                                            {
-                                                move_up = true;
-                                            }
-                                        },
-                                    );
-                                });
-                                let current = match &step.action {
-                                    Action::MouseClick { .. } => 0,
-                                    Action::KeyPress { .. } => 1,
-                                    Action::TypeText { .. } => 2,
-                                    Action::Wait { .. } => 3,
-                                };
-                                let mut selected = current;
-                                ui.horizontal(|ui| {
-                                    egui::ComboBox::from_id_source(("action", index))
-                                        .selected_text(match current {
-                                            0 => tr("add_click"),
-                                            1 => tr("add_key"),
-                                            2 => tr("add_text"),
-                                            _ => tr("add_wait"),
-                                        })
-                                        .show_ui(ui, |ui| {
-                                            ui.selectable_value(&mut selected, 0, tr("add_click"));
-                                            ui.selectable_value(&mut selected, 1, tr("add_key"));
-                                            ui.selectable_value(&mut selected, 2, tr("add_text"));
-                                            ui.selectable_value(&mut selected, 3, tr("add_wait"));
-                                        });
-                                });
-                                if selected != current {
-                                    step.action = match selected {
-                                        0 => Action::default(),
-                                        1 => Action::KeyPress {
-                                            key: "Space".into(),
-                                            hold_ms: 35,
-                                        },
-                                        2 => Action::TypeText {
-                                            text: String::new(),
-                                        },
-                                        _ => Action::Wait { duration_ms: 250 },
-                                    };
-                                    self.dirty = true;
-                                }
-                                match &mut step.action {
-                                    Action::MouseClick {
-                                        button,
-                                        click_type,
-                                        hold_ms,
-                                        position,
-                                    } => {
-                                        ui.horizontal(|ui| {
-                                            ui.label(tr("button"));
-                                            egui::ComboBox::from_id_source(("button", index))
-                                                .selected_text(match button {
-                                                    MouseButton::Left => "Left",
-                                                    MouseButton::Right => "Right",
-                                                    MouseButton::Middle => "Middle",
-                                                })
-                                                .show_ui(ui, |ui| {
-                                                    if ui
-                                                        .selectable_value(
-                                                            button,
-                                                            MouseButton::Left,
-                                                            "Left",
-                                                        )
-                                                        .changed()
-                                                    {
-                                                        self.dirty = true;
-                                                    }
-                                                    if ui
-                                                        .selectable_value(
-                                                            button,
-                                                            MouseButton::Right,
-                                                            "Right",
-                                                        )
-                                                        .changed()
-                                                    {
-                                                        self.dirty = true;
-                                                    }
-                                                    if ui
-                                                        .selectable_value(
-                                                            button,
-                                                            MouseButton::Middle,
-                                                            "Middle",
-                                                        )
-                                                        .changed()
-                                                    {
-                                                        self.dirty = true;
-                                                    }
-                                                });
-                                            ui.label(tr("click_type"));
-                                            egui::ComboBox::from_id_source(("click_type", index))
+                                    match &mut step.action {
+                                        Action::MouseClick {
+                                            button,
+                                            click_type,
+                                            hold_ms,
+                                            position,
+                                        } => {
+                                            ui.horizontal(|ui| {
+                                                ui.label(tr("button"));
+                                                egui::ComboBox::from_id_source(("button", index))
+                                                    .selected_text(match button {
+                                                        MouseButton::Left => "Left",
+                                                        MouseButton::Right => "Right",
+                                                        MouseButton::Middle => "Middle",
+                                                    })
+                                                    .show_ui(ui, |ui| {
+                                                        if ui
+                                                            .selectable_value(
+                                                                button,
+                                                                MouseButton::Left,
+                                                                "Left",
+                                                            )
+                                                            .changed()
+                                                        {
+                                                            self.dirty = true;
+                                                        }
+                                                        if ui
+                                                            .selectable_value(
+                                                                button,
+                                                                MouseButton::Right,
+                                                                "Right",
+                                                            )
+                                                            .changed()
+                                                        {
+                                                            self.dirty = true;
+                                                        }
+                                                        if ui
+                                                            .selectable_value(
+                                                                button,
+                                                                MouseButton::Middle,
+                                                                "Middle",
+                                                            )
+                                                            .changed()
+                                                        {
+                                                            self.dirty = true;
+                                                        }
+                                                    });
+                                                ui.label(tr("click_type"));
+                                                egui::ComboBox::from_id_source((
+                                                    "click_type",
+                                                    index,
+                                                ))
                                                 .selected_text(match click_type {
                                                     ClickType::Single => tr("single"),
                                                     ClickType::Double => tr("double"),
@@ -389,97 +531,121 @@ impl ClickerApp {
                                                         self.dirty = true;
                                                     }
                                                 });
-                                        });
-                                        if *click_type == ClickType::Hold
-                                            && ui
-                                                .add(
-                                                    egui::DragValue::new(hold_ms)
-                                                        .clamp_range(1..=86_400_000)
-                                                        .prefix(format!("{}: ", tr("hold_ms"))),
-                                                )
+                                            });
+                                            if *click_type == ClickType::Hold
+                                                && ui
+                                                    .add(
+                                                        egui::DragValue::new(hold_ms)
+                                                            .clamp_range(1..=86_400_000)
+                                                            .prefix(format!("{}: ", tr("hold_ms"))),
+                                                    )
+                                                    .changed()
+                                            {
+                                                self.dirty = true;
+                                            }
+                                            let mut fixed = position.is_some();
+                                            if ui
+                                                .checkbox(&mut fixed, tr("fixed_position"))
                                                 .changed()
-                                        {
-                                            self.dirty = true;
+                                            {
+                                                *position = if fixed { Some([0, 0]) } else { None };
+                                                self.dirty = true;
+                                            }
+                                            if let Some(coords) = position {
+                                                ui.horizontal(|ui| {
+                                                    ui.label(tr("x"));
+                                                    if ui
+                                                        .add(egui::DragValue::new(&mut coords[0]))
+                                                        .changed()
+                                                    {
+                                                        self.dirty = true;
+                                                    }
+                                                    ui.label(tr("y"));
+                                                    if ui
+                                                        .add(egui::DragValue::new(&mut coords[1]))
+                                                        .changed()
+                                                    {
+                                                        self.dirty = true;
+                                                    }
+                                                });
+                                            } else {
+                                                ui.label(tr("cursor"));
+                                            }
                                         }
-                                        let mut fixed = position.is_some();
-                                        if ui.checkbox(&mut fixed, tr("fixed_position")).changed() {
-                                            *position = if fixed { Some([0, 0]) } else { None };
-                                            self.dirty = true;
-                                        }
-                                        if let Some(coords) = position {
+                                        Action::MouseMove { position } => {
+                                            ui.label(RichText::new(tr("move_hint")).weak());
                                             ui.horizontal(|ui| {
                                                 ui.label(tr("x"));
                                                 if ui
-                                                    .add(egui::DragValue::new(&mut coords[0]))
+                                                    .add(egui::DragValue::new(&mut position[0]))
                                                     .changed()
                                                 {
                                                     self.dirty = true;
                                                 }
                                                 ui.label(tr("y"));
                                                 if ui
-                                                    .add(egui::DragValue::new(&mut coords[1]))
+                                                    .add(egui::DragValue::new(&mut position[1]))
                                                     .changed()
                                                 {
                                                     self.dirty = true;
                                                 }
                                             });
-                                        } else {
-                                            ui.label(tr("cursor"));
                                         }
-                                    }
-                                    Action::KeyPress { key, hold_ms } => {
-                                        ui.horizontal(|ui| {
-                                            ui.label(tr("key"));
-                                            if ui.text_edit_singleline(key).changed() {
+                                        Action::KeyPress { key, hold_ms } => {
+                                            ui.horizontal(|ui| {
+                                                ui.label(tr("key"));
+                                                if ui.text_edit_singleline(key).changed() {
+                                                    self.dirty = true;
+                                                }
+                                                if ui
+                                                    .add(
+                                                        egui::DragValue::new(hold_ms)
+                                                            .clamp_range(1..=60_000)
+                                                            .prefix(format!("{}: ", tr("hold_ms"))),
+                                                    )
+                                                    .changed()
+                                                {
+                                                    self.dirty = true;
+                                                }
+                                            });
+                                            ui.label(RichText::new(tr("key_hint")).weak());
+                                        }
+                                        Action::TypeText { text } => {
+                                            ui.label(tr("text"));
+                                            if ui.text_edit_multiline(text).changed() {
                                                 self.dirty = true;
                                             }
+                                        }
+                                        Action::Wait { duration_ms } => {
                                             if ui
                                                 .add(
-                                                    egui::DragValue::new(hold_ms)
-                                                        .clamp_range(1..=60_000)
-                                                        .prefix(format!("{}: ", tr("hold_ms"))),
+                                                    egui::DragValue::new(duration_ms)
+                                                        .clamp_range(0..=86_400_000)
+                                                        .prefix(format!("{}: ", tr("wait_ms"))),
                                                 )
                                                 .changed()
                                             {
                                                 self.dirty = true;
                                             }
-                                        });
-                                        ui.label(RichText::new(tr("key_hint")).weak());
-                                    }
-                                    Action::TypeText { text } => {
-                                        ui.label(tr("text"));
-                                        if ui.text_edit_multiline(text).changed() {
-                                            self.dirty = true;
                                         }
                                     }
-                                    Action::Wait { duration_ms } => {
+                                    ui.horizontal(|ui| {
+                                        ui.label(tr("delay_after"));
                                         if ui
                                             .add(
-                                                egui::DragValue::new(duration_ms)
+                                                egui::DragValue::new(&mut step.delay_after_ms)
                                                     .clamp_range(0..=86_400_000)
-                                                    .prefix(format!("{}: ", tr("wait_ms"))),
+                                                    .suffix(" ms"),
                                             )
                                             .changed()
                                         {
                                             self.dirty = true;
                                         }
-                                    }
-                                }
-                                ui.horizontal(|ui| {
-                                    ui.label(tr("delay_after"));
-                                    if ui
-                                        .add(
-                                            egui::DragValue::new(&mut step.delay_after_ms)
-                                                .clamp_range(0..=86_400_000)
-                                                .suffix(" ms"),
-                                        )
-                                        .changed()
-                                    {
-                                        self.dirty = true;
-                                    }
+                                    });
                                 });
                             });
                         });
+                    });
                     if remove {
                         remove_index = Some(index);
                     }
@@ -712,6 +878,29 @@ fn parse_hotkey_pair(settings: &AppSettings) -> Result<(HotKey, HotKey), String>
     Ok((start, stop))
 }
 
+fn validate_settings_file(settings: &AppSettings, catalog: &Catalog) -> Result<(), &'static str> {
+    if settings.validate().is_err() {
+        return Err("invalid_settings_file");
+    }
+    if !catalog
+        .languages()
+        .iter()
+        .any(|(code, _)| code == &settings.locale)
+    {
+        return Err("invalid_language");
+    }
+    if settings.theme != "dark" && settings.theme != "light" {
+        return Err("invalid_theme");
+    }
+    if theme::parse_color(&settings.accent_hex).is_none() {
+        return Err("invalid_accent");
+    }
+    if parse_hotkey_pair(settings).is_err() {
+        return Err("invalid_hotkeys");
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -731,5 +920,48 @@ mod tests {
             ..Default::default()
         };
         assert!(parse_hotkey_pair(&duplicate).is_err());
+    }
+
+    #[test]
+    fn settings_file_validation_checks_preferences_and_hotkeys() {
+        let catalog = Catalog::load();
+        assert!(validate_settings_file(&AppSettings::default(), &catalog).is_ok());
+
+        let invalid_theme = AppSettings {
+            theme: "neon".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            validate_settings_file(&invalid_theme, &catalog),
+            Err("invalid_theme")
+        );
+
+        let invalid_accent = AppSettings {
+            accent_hex: "blue".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            validate_settings_file(&invalid_accent, &catalog),
+            Err("invalid_accent")
+        );
+
+        let invalid_hotkeys = AppSettings {
+            start_hotkey: "F6".into(),
+            stop_hotkey: "F6".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            validate_settings_file(&invalid_hotkeys, &catalog),
+            Err("invalid_hotkeys")
+        );
+
+        let invalid_language = AppSettings {
+            locale: "xx-unknown".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            validate_settings_file(&invalid_language, &catalog),
+            Err("invalid_language")
+        );
     }
 }

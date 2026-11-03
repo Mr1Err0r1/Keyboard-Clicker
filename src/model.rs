@@ -27,6 +27,9 @@ pub enum Action {
         hold_ms: u64,
         position: Option<[i32; 2]>,
     },
+    MouseMove {
+        position: [i32; 2],
+    },
     KeyPress {
         key: String,
         hold_ms: u64,
@@ -82,6 +85,9 @@ pub struct AppSettings {
     pub sequence: Vec<SequenceStep>,
 }
 
+pub const MAX_SEQUENCE_STEPS: usize = 256;
+const MAX_ACTION_DURATION_MS: u64 = 86_400_000;
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -102,6 +108,17 @@ impl AppSettings {
         if self.interval_ms == 0 {
             return Err("The cycle interval must be at least 1 ms.".into());
         }
+        if self.interval_ms > 3_600_000 {
+            return Err("The cycle interval cannot exceed one hour.".into());
+        }
+        if self.repeat_count > 1_000_000_000 {
+            return Err("The repeat count cannot exceed 1,000,000,000.".into());
+        }
+        if self.sequence.len() > MAX_SEQUENCE_STEPS {
+            return Err(format!(
+                "A sequence can contain at most {MAX_SEQUENCE_STEPS} actions."
+            ));
+        }
         if self.sequence.is_empty() {
             return Err("Add at least one action to the sequence.".into());
         }
@@ -109,12 +126,30 @@ impl AppSettings {
             return Err("Enable at least one sequence action.".into());
         }
         for (index, step) in self.sequence.iter().enumerate() {
+            if step.delay_after_ms > MAX_ACTION_DURATION_MS {
+                return Err(format!("Step {} delay cannot exceed 24 hours.", index + 1));
+            }
             match &step.action {
                 Action::KeyPress { key, .. } if key.trim().is_empty() => {
                     return Err(format!("Step {} needs a key name.", index + 1));
                 }
+                Action::KeyPress { hold_ms, .. } if *hold_ms > MAX_ACTION_DURATION_MS => {
+                    return Err(format!(
+                        "Step {} key hold cannot exceed 24 hours.",
+                        index + 1
+                    ));
+                }
+                Action::MouseClick { hold_ms, .. } if *hold_ms > MAX_ACTION_DURATION_MS => {
+                    return Err(format!(
+                        "Step {} mouse hold cannot exceed 24 hours.",
+                        index + 1
+                    ));
+                }
                 Action::TypeText { text } if text.is_empty() => {
                     return Err(format!("Step {} needs text to type.", index + 1));
+                }
+                Action::Wait { duration_ms } if *duration_ms > MAX_ACTION_DURATION_MS => {
+                    return Err(format!("Step {} wait cannot exceed 24 hours.", index + 1));
                 }
                 _ => {}
             }
@@ -164,6 +199,15 @@ mod tests {
     }
 
     #[test]
+    fn mouse_move_action_round_trips_through_json() {
+        let action = Action::MouseMove {
+            position: [420, 280],
+        };
+        let encoded = serde_json::to_string(&action).unwrap();
+        assert_eq!(serde_json::from_str::<Action>(&encoded).unwrap(), action);
+    }
+
+    #[test]
     fn rejects_empty_or_disabled_sequences() {
         let empty = AppSettings {
             sequence: vec![],
@@ -178,5 +222,25 @@ mod tests {
             ..Default::default()
         };
         assert!(disabled.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_imported_sequences_with_unsafe_bounds() {
+        let too_many = AppSettings {
+            sequence: vec![SequenceStep::default(); MAX_SEQUENCE_STEPS + 1],
+            ..Default::default()
+        };
+        assert!(too_many.validate().is_err());
+
+        let excessive_wait = AppSettings {
+            sequence: vec![SequenceStep {
+                action: Action::Wait {
+                    duration_ms: MAX_ACTION_DURATION_MS + 1,
+                },
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        assert!(excessive_wait.validate().is_err());
     }
 }

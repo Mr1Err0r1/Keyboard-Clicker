@@ -1,5 +1,8 @@
 use crate::model::AppSettings;
-use std::{fs, io, path::PathBuf};
+use std::{
+    fs, io,
+    path::{Path, PathBuf},
+};
 
 pub fn config_dir() -> PathBuf {
     dirs::config_dir()
@@ -30,6 +33,25 @@ pub fn save(settings: &AppSettings) -> io::Result<()> {
     fs::rename(temporary, destination)
 }
 
+pub fn export_to(path: &Path, settings: &AppSettings) -> io::Result<()> {
+    settings
+        .validate()
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
+    let bytes = serde_json::to_vec_pretty(settings)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    fs::write(path, bytes)
+}
+
+pub fn import_from(path: &Path) -> io::Result<AppSettings> {
+    let contents = fs::read_to_string(path)?;
+    let settings: AppSettings = serde_json::from_str(&contents)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    settings
+        .validate()
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    Ok(settings)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -37,5 +59,16 @@ mod tests {
     #[test]
     fn settings_path_is_inside_the_application_config_folder() {
         assert!(config_path().ends_with("KeyboardClicker/settings.json"));
+    }
+
+    #[test]
+    fn settings_can_be_exported_and_imported_without_loss() {
+        let path =
+            std::env::temp_dir().join(format!("keyboard-clicker-{}.json", std::process::id()));
+        let expected = AppSettings::default();
+        export_to(&path, &expected).unwrap();
+        let imported = import_from(&path).unwrap();
+        let _ = fs::remove_file(path);
+        assert_eq!(imported, expected);
     }
 }

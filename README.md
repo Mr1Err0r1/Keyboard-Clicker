@@ -16,7 +16,9 @@ The Rust app targets 64-bit Windows 10/11 and x86_64 Linux. The default interfac
 
 ### Build automation sequences
 
-Combine mouse clicks, named key presses, text entry, and timed waits in one ordered sequence. Enable or disable individual steps, reorder them, and set delays. Repeat a sequence a chosen number of times, or set the count to `0` to continue until stopped. Mouse actions support left, right, and middle buttons, single/double clicks, held clicks, and optional fixed screen coordinates.
+Build a connected, top-to-bottom flow of mouse clicks, mouse moves, key presses and combinations (for example `Ctrl+A`), text entry, and timed waits. Each numbered node can be enabled or disabled, edited, reordered, or removed. Set a delay after any action, then repeat a flow a chosen number of times or set the count to `0` to continue until stopped. Mouse clicks support left, right, and middle buttons, single/double clicks, held clicks, and optional fixed screen coordinates. Mouse-move nodes use explicit screen coordinates.
+
+The editor saves settings automatically and can import/export validated JSON settings files for backup or sharing. Imported flows are limited to 256 steps and waits/holds of at most 24 hours each. Start and Stop remain available in the window, and global hotkeys work when supported by the desktop session. The automation runs in a separate worker; stop requests interrupt waits and held keys/buttons are released before the worker exits.
 
 The default global hotkeys are F6 to start and F7 to stop. Change them in Appearance; single keys and modifier combinations such as `Ctrl+F6` are supported. The start and stop shortcuts must be different. Start and Stop buttons remain available in the window if the desktop session does not allow global shortcuts.
 
