@@ -34,14 +34,14 @@ jobs:
         run: cargo build --release --locked
       - name: Upload Linux preview binary
         if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: keyboard-clicker-linux-x86_64
           path: target/release/keyboard-clicker
           retention-days: 14
       - name: Upload Windows preview executable
         if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: keyboard-clicker-windows-x86_64
           path: target/release/keyboard-clicker.exe
@@ -85,7 +85,7 @@ jobs:
           Compress-Archive -Path target/${{ matrix.target }}/release/keyboard-clicker.exe -DestinationPath ${{ matrix.asset }}
           $hash = (Get-FileHash -Path ${{ matrix.asset }} -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  ${{ matrix.asset }}" | Set-Content -Path ${{ matrix.asset }}.sha256 -Encoding ascii
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.asset }}
           path: |
