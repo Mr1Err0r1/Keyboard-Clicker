@@ -4,7 +4,7 @@ This file is the canonical repository guide for AI coding agents. Read it before
 
 ## Project at a glance
 
-Keyboard Clicker is a desktop mouse/keyboard automation application. `main` contains the current Rust application (version `2.0.0`) and the preserved Python application. The original pre-Rust repository state is preserved on branch `old_original`; do not rewrite or delete that branch. The Rust app is the primary product direction. Python changes must be intentional and remain independent of Rust changes.
+Keyboard Clicker is a desktop mouse/keyboard automation application. `main` contains the current Rust application (version `2.1.0`) and the preserved Python application. The original pre-Rust repository state is preserved on branch `old_original`; do not rewrite or delete that branch. The Rust app is the primary product direction. Python changes must be intentional and remain independent of Rust changes.
 
 The default UI language is English, with German and Russian translations. The app targets x86_64 Windows 10/11 and x86_64 Linux. Linux input automation currently depends on X11; Wayland support is not guaranteed.
 

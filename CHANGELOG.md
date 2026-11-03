@@ -4,10 +4,13 @@ This project follows Semantic Versioning. Each published release should include 
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-04
+
 ### Added
 - Connected, numbered flow nodes in the action editor and a dedicated mouse-move action with editable screen coordinates.
 - Real held-key support for modifier combinations such as `Ctrl+A`; keys are released in reverse order after each press.
 - Validated JSON import/export for settings, with limits on sequence size and action durations.
+- A standalone, checksum-verified Windows x64 executable asset in addition to the portable ZIP.
 
 ### Changed
 - Updated GitHub Actions and compatible Rust dependencies after cross-platform CI verification.
