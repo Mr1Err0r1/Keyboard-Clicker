@@ -75,15 +75,22 @@ jobs:
       - name: Package Linux binary
         if: runner.os == 'Linux'
         shell: bash
-        run: tar -czf ${{ matrix.asset }} -C target/${{ matrix.target }}/release keyboard-clicker
+        run: |
+          tar -czf ${{ matrix.asset }} -C target/${{ matrix.target }}/release keyboard-clicker
+          sha256sum ${{ matrix.asset }} > ${{ matrix.asset }}.sha256
       - name: Package Windows executable
         if: runner.os == 'Windows'
         shell: pwsh
-        run: Compress-Archive -Path target/${{ matrix.target }}/release/keyboard-clicker.exe -DestinationPath ${{ matrix.asset }}
+        run: |
+          Compress-Archive -Path target/${{ matrix.target }}/release/keyboard-clicker.exe -DestinationPath ${{ matrix.asset }}
+          $hash = (Get-FileHash -Path ${{ matrix.asset }} -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  ${{ matrix.asset }}" | Set-Content -Path ${{ matrix.asset }}.sha256 -Encoding ascii
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.asset }}
-          path: ${{ matrix.asset }}
+          path: |
+            ${{ matrix.asset }}
+            ${{ matrix.asset }}.sha256
           retention-days: 7
 
   publish:
