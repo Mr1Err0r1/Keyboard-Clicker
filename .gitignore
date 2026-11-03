@@ -5,6 +5,15 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Rust build output (root crate and any nested scratch crates)
+**/target/
+
+# Common editor and operating-system metadata
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
 # C extensions
 *.so
 

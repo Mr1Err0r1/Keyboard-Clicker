@@ -50,6 +50,10 @@ cargo build --release --locked
 
 The binary is written to `target/release/keyboard-clicker` on Linux and `target/release/keyboard-clicker.exe` on Windows. GitHub Actions tests both systems. Pushing a semantic version tag such as `v2.0.0` builds x86_64 Windows and Linux release archives and attaches them to a GitHub Release. See [`CHANGELOG.md`](CHANGELOG.md) and the version-matched notes under [`.github/release-notes`](.github/release-notes).
 
+## Repository layout
+
+The active Rust application lives in `src/`; the preserved Python edition lives in `main.py` and `gui/`. Built-in translations are in `locales/`, production and concept artwork are under `assets/`, and GitHub automation/templates are under `.github/`. [`AGENTS.md`](AGENTS.md) is the concise architecture and workflow guide for AI coding agents.
+
 ## Original Python application
 
 The existing Python files remain available and are not replaced by the Rust app. To run that edition:
