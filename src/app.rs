@@ -83,6 +83,10 @@ impl ClickerApp {
     }
 
     fn export_settings(&mut self) {
+        if let Err(key) = validate_settings_file(&self.settings, &self.catalog) {
+            self.message = Some((self.tr(key), true));
+            return;
+        }
         let Some(path) = rfd::FileDialog::new()
             .add_filter("JSON settings", &["json"])
             .set_file_name("keyboard-clicker-settings.json")
@@ -106,38 +110,17 @@ impl ClickerApp {
         else {
             return;
         };
-        let imported = config::import_from(&path).and_then(|settings| {
-            if !self
-                .catalog
-                .languages()
-                .iter()
-                .any(|(code, _)| code == &settings.locale)
-            {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "The settings file uses an unavailable language.",
-                ));
+        let imported = match config::import_from(&path) {
+            Ok(settings) => settings,
+            Err(_) => {
+                self.message = Some((self.tr("invalid_settings_file"), true));
+                return;
             }
-            if settings.theme != "dark" && settings.theme != "light" {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "The settings file uses an unsupported theme.",
-                ));
-            }
-            if theme::parse_color(&settings.accent_hex).is_none() {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "Use a 6-digit HEX color, for example #6C8CFF.",
-                ));
-            }
-            parse_hotkey_pair(&settings)
-                .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
-            Ok(settings)
-        });
-        let Ok(imported) = imported else {
-            self.message = Some((imported.unwrap_err().to_string(), true));
-            return;
         };
+        if let Err(key) = validate_settings_file(&imported, &self.catalog) {
+            self.message = Some((self.tr(key), true));
+            return;
+        }
 
         let previous = self.settings.clone();
         self.settings = imported;
@@ -262,16 +245,18 @@ impl ClickerApp {
         });
         ui.add_space(14.0);
         ui.separator();
-        ui.horizontal(|ui| {
+        ui.vertical(|ui| {
             ui.heading(tr("sequence_title"));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.add_enabled_ui(!locked, |ui| {
-                    if ui.button(tr("export_settings")).clicked() {
-                        self.export_settings();
-                    }
+            ui.add_space(4.0);
+            ui.add_enabled_ui(!locked, |ui| {
+                ui.horizontal_wrapped(|ui| {
                     if ui.button(tr("import_settings")).clicked() {
                         self.import_settings();
                     }
+                    if ui.button(tr("export_settings")).clicked() {
+                        self.export_settings();
+                    }
+                    ui.separator();
                     ui.add_enabled_ui(self.settings.sequence.len() < MAX_SEQUENCE_STEPS, |ui| {
                         if ui.button(tr("add_wait")).clicked() {
                             self.settings.sequence.push(SequenceStep {
@@ -893,6 +878,29 @@ fn parse_hotkey_pair(settings: &AppSettings) -> Result<(HotKey, HotKey), String>
     Ok((start, stop))
 }
 
+fn validate_settings_file(settings: &AppSettings, catalog: &Catalog) -> Result<(), &'static str> {
+    if settings.validate().is_err() {
+        return Err("invalid_settings_file");
+    }
+    if !catalog
+        .languages()
+        .iter()
+        .any(|(code, _)| code == &settings.locale)
+    {
+        return Err("invalid_language");
+    }
+    if settings.theme != "dark" && settings.theme != "light" {
+        return Err("invalid_theme");
+    }
+    if theme::parse_color(&settings.accent_hex).is_none() {
+        return Err("invalid_accent");
+    }
+    if parse_hotkey_pair(settings).is_err() {
+        return Err("invalid_hotkeys");
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -912,5 +920,48 @@ mod tests {
             ..Default::default()
         };
         assert!(parse_hotkey_pair(&duplicate).is_err());
+    }
+
+    #[test]
+    fn settings_file_validation_checks_preferences_and_hotkeys() {
+        let catalog = Catalog::load();
+        assert!(validate_settings_file(&AppSettings::default(), &catalog).is_ok());
+
+        let invalid_theme = AppSettings {
+            theme: "neon".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            validate_settings_file(&invalid_theme, &catalog),
+            Err("invalid_theme")
+        );
+
+        let invalid_accent = AppSettings {
+            accent_hex: "blue".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            validate_settings_file(&invalid_accent, &catalog),
+            Err("invalid_accent")
+        );
+
+        let invalid_hotkeys = AppSettings {
+            start_hotkey: "F6".into(),
+            stop_hotkey: "F6".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            validate_settings_file(&invalid_hotkeys, &catalog),
+            Err("invalid_hotkeys")
+        );
+
+        let invalid_language = AppSettings {
+            locale: "xx-unknown".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            validate_settings_file(&invalid_language, &catalog),
+            Err("invalid_language")
+        );
     }
 }

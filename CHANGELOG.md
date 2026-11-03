@@ -12,7 +12,7 @@ This project follows Semantic Versioning. Each published release should include 
 ### Changed
 - Updated GitHub Actions and compatible Rust dependencies after cross-platform CI verification.
 - Clarified the flow editor's ordering, repeat behavior, and keyboard-combination syntax in all built-in locales.
-- Updated GitHub Actions and compatible Rust dependencies after cross-platform CI verification.
+- Made sequence action controls wrap cleanly in narrow windows and localized settings-file validation errors.
 
 ## [2.0.0] - 2026-11-03
 
