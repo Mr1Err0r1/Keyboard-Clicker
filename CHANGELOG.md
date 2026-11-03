@@ -2,6 +2,11 @@
 
 This project follows Semantic Versioning. Each published release should include tested Windows and Linux artifacts.
 
+## [Unreleased]
+
+### Changed
+- Updated GitHub Actions and compatible Rust dependencies after cross-platform CI verification.
+
 ## [2.0.0] - 2026-11-03
 
 ### Added
