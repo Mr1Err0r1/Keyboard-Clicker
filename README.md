@@ -6,7 +6,7 @@ A cross-platform mouse and keyboard automation tool. The repository preserves th
 
 ## Downloads
 
-Get stable, versioned builds from [GitHub Releases](https://github.com/Mr1Err0r1/Keyboard-Clicker/releases). Windows downloads are ZIP files containing a portable x64 `.exe`; Linux downloads are x86_64 tarballs. Development builds are published as short-lived artifacts on the [Actions page](https://github.com/Mr1Err0r1/Keyboard-Clicker/actions) and are retained for 14 days.
+Get stable, versioned builds from [GitHub Releases](https://github.com/Mr1Err0r1/Keyboard-Clicker/releases). Windows releases include a directly downloadable portable x64 `.exe` and a ZIP archive; Linux releases are x86_64 tarballs. SHA-256 sidecars are provided for the release files. Development builds are published as short-lived artifacts on the [Actions page](https://github.com/Mr1Err0r1/Keyboard-Clicker/actions) and are retained for 14 days.
 
 The Windows executable is currently unsigned. Depending on Windows SmartScreen reputation and local policy, Windows may show a first-run warning. Use only releases from this repository and review the release checksums before running downloaded files.
 
@@ -50,7 +50,7 @@ cargo clippy --all-targets --locked -- -D warnings
 cargo build --release --locked
 ```
 
-The binary is written to `target/release/keyboard-clicker` on Linux and `target/release/keyboard-clicker.exe` on Windows. GitHub Actions tests both systems. Pushing a semantic version tag such as `v2.0.0` builds x86_64 Windows and Linux release archives and attaches them to a GitHub Release. See [`CHANGELOG.md`](CHANGELOG.md) and the version-matched notes under [`.github/release-notes`](.github/release-notes).
+The binary is written to `target/release/keyboard-clicker` on Linux and `target/release/keyboard-clicker.exe` on Windows. GitHub Actions tests both systems. Pushing a semantic version tag such as `v2.1.0` builds the direct Windows x64 executable, a Windows ZIP, and a Linux x86_64 tarball, with SHA-256 sidecars, and attaches them to a GitHub Release. See [`CHANGELOG.md`](CHANGELOG.md) and the version-matched notes under [`.github/release-notes`](.github/release-notes).
 
 ## Repository layout
 

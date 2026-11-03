@@ -752,7 +752,10 @@ impl ClickerApp {
             self.settings.start_hotkey,
             self.settings.stop_hotkey
         ));
-        ui.label("Version 2.0.0 · Rust · Windows 10/11 and Linux");
+        ui.label(format!(
+            "Version {} · Rust · Windows 10/11 and Linux",
+            env!("CARGO_PKG_VERSION")
+        ));
         ui.hyperlink_to(
             "GitHub project",
             "https://github.com/Mr1Err0r1/Keyboard-Clicker",

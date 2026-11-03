@@ -85,12 +85,29 @@ jobs:
           Compress-Archive -Path target/${{ matrix.target }}/release/keyboard-clicker.exe -DestinationPath ${{ matrix.asset }}
           $hash = (Get-FileHash -Path ${{ matrix.asset }} -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  ${{ matrix.asset }}" | Set-Content -Path ${{ matrix.asset }}.sha256 -Encoding ascii
+      - name: Prepare standalone Windows executable
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $releaseExe = "keyboard-clicker-windows-x86_64.exe"
+          Copy-Item -Path "target/${{ matrix.target }}/release/keyboard-clicker.exe" -Destination $releaseExe
+          $hash = (Get-FileHash -Path $releaseExe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $releaseExe" | Set-Content -Path "$releaseExe.sha256" -Encoding ascii
       - uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.asset }}
           path: |
             ${{ matrix.asset }}
             ${{ matrix.asset }}.sha256
+          retention-days: 7
+      - name: Upload standalone Windows executable
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-keyboard-clicker-windows-x86_64-exe
+          path: |
+            keyboard-clicker-windows-x86_64.exe
+            keyboard-clicker-windows-x86_64.exe.sha256
           retention-days: 7
 
   publish:
