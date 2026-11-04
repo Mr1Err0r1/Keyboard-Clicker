@@ -30,6 +30,10 @@ pub fn parse_color(value: &str) -> Option<Color32> {
     Some(Color32::from_rgb(red, green, blue))
 }
 
+pub fn format_color(color: Color32) -> String {
+    format!("#{:02X}{:02X}{:02X}", color.r(), color.g(), color.b())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -42,5 +46,12 @@ mod tests {
         );
         assert!(parse_color("bad").is_none());
         assert!(parse_color("😀ab").is_none());
+    }
+
+    #[test]
+    fn formats_picker_colors_as_six_digit_hex() {
+        let color = Color32::from_rgb(0x12, 0xAB, 0xF0);
+        assert_eq!(format_color(color), "#12ABF0");
+        assert_eq!(parse_color(&format_color(color)), Some(color));
     }
 }

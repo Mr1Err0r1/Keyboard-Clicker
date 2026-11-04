@@ -59,6 +59,9 @@ pub struct SequenceStep {
     pub action: Action,
     /// Delay after this action, in milliseconds.
     pub delay_after_ms: u64,
+    /// Optional user-arranged position in the visual flow canvas.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canvas_position: Option<[f32; 2]>,
 }
 
 impl Default for SequenceStep {
@@ -67,6 +70,7 @@ impl Default for SequenceStep {
             enabled: true,
             action: Action::default(),
             delay_after_ms: 0,
+            canvas_position: None,
         }
     }
 }
@@ -126,6 +130,18 @@ impl AppSettings {
             return Err("Enable at least one sequence action.".into());
         }
         for (index, step) in self.sequence.iter().enumerate() {
+            if let Some([x, y]) = step.canvas_position {
+                if !x.is_finite()
+                    || !y.is_finite()
+                    || !(0.0..=20_000.0).contains(&x)
+                    || !(0.0..=20_000.0).contains(&y)
+                {
+                    return Err(format!(
+                        "Step {} has an invalid diagram position.",
+                        index + 1
+                    ));
+                }
+            }
             if step.delay_after_ms > MAX_ACTION_DURATION_MS {
                 return Err(format!("Step {} delay cannot exceed 24 hours.", index + 1));
             }
@@ -205,6 +221,44 @@ mod tests {
         };
         let encoded = serde_json::to_string(&action).unwrap();
         assert_eq!(serde_json::from_str::<Action>(&encoded).unwrap(), action);
+    }
+
+    #[test]
+    fn canvas_positions_round_trip_and_older_settings_still_load() {
+        let mut settings = AppSettings::default();
+        settings.sequence[0].canvas_position = Some([125.5, 240.0]);
+        let encoded = serde_json::to_value(&settings).unwrap();
+        assert_eq!(
+            serde_json::from_value::<AppSettings>(encoded.clone()).unwrap(),
+            settings
+        );
+
+        let mut legacy = encoded;
+        legacy["sequence"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("canvas_position");
+        let loaded: AppSettings = serde_json::from_value(legacy).unwrap();
+        assert_eq!(loaded.sequence[0].canvas_position, None);
+    }
+
+    #[test]
+    fn rejects_invalid_canvas_positions() {
+        for position in [
+            [f32::NAN, 10.0],
+            [10.0, f32::INFINITY],
+            [-1.0, 10.0],
+            [20_001.0, 10.0],
+        ] {
+            let settings = AppSettings {
+                sequence: vec![SequenceStep {
+                    canvas_position: Some(position),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            };
+            assert!(settings.validate().is_err());
+        }
     }
 
     #[test]

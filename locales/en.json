@@ -11,7 +11,12 @@
   "start": "Start",
   "stop": "Stop",
   "sequence_title": "Action sequence",
-  "sequence_hint": "Build a flow from top to bottom. Connected nodes show the exact order; one cycle repeats the full flow. Up to 256 actions.",
+  "sequence_hint": "Build a flow from connected actions. Numbered arrows show execution order; one cycle repeats the full flow. Up to 256 actions.",
+  "flow_canvas": "Flow canvas",
+  "canvas_hint": "Drag nodes to arrange the canvas. Connections keep the numbered execution order. Select a node to edit its action below.",
+  "canvas_drag": "Drag to arrange · click to edit",
+  "node_properties": "Action details",
+  "canvas_select_hint": "Select a node on the canvas or its step below to edit the action.",
   "add_click": "Add click",
   "add_move": "Move mouse",
   "add_key": "Add key press",
@@ -55,7 +60,10 @@
   "theme": "Theme",
   "dark": "Dark",
   "light": "Light",
-  "accent": "Accent color (hex)",
+  "accent": "Accent color",
+  "accent_palette": "Palette",
+  "custom_color": "Choose any custom accent color",
+  "accent_hint": "Pick a swatch or open the color picker. Changes apply immediately and are saved automatically.",
   "appearance_hint": "Add a JSON translation file to the locales folder in the app config directory to add another language.",
   "start_hotkey": "Start hotkey",
   "stop_hotkey": "Stop hotkey",
@@ -68,5 +76,5 @@
   "save_error": "Could not save settings",
   "interval_error": "The cycle interval must be at least 1 ms.",
   "empty_sequence_error": "Add at least one enabled action to the sequence.",
-  "updating": "Settings are applied when you next start the sequence."
+  "updating": "Theme and accent changes apply immediately; automation changes take effect when you next start the sequence."
 }

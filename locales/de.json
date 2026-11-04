@@ -11,7 +11,12 @@
   "start": "Starten",
   "stop": "Stoppen",
   "sequence_title": "Aktionssequenz",
-  "sequence_hint": "Baue den Ablauf von oben nach unten. Verbundene Knoten zeigen die Reihenfolge; ein Durchlauf wiederholt alles. Bis zu 256 Aktionen.",
+  "sequence_hint": "Erstelle einen Ablauf aus verbundenen Aktionen. Nummerierte Pfeile zeigen die Reihenfolge; ein Durchlauf wiederholt den gesamten Ablauf. Bis zu 256 Aktionen.",
+  "flow_canvas": "Flow-Arbeitsfläche",
+  "canvas_hint": "Ziehe Knoten, um die Arbeitsfläche anzuordnen. Die Verbindungen behalten die nummerierte Ausführungsreihenfolge. Wähle einen Knoten, um seine Aktion unten zu bearbeiten.",
+  "canvas_drag": "Ziehen zum Anordnen · Klicken zum Bearbeiten",
+  "node_properties": "Aktionsdetails",
+  "canvas_select_hint": "Wähle einen Knoten auf der Arbeitsfläche oder seinen Schritt unten aus, um die Aktion zu bearbeiten.",
   "add_click": "Klick hinzufügen",
   "add_move": "Maus bewegen",
   "add_key": "Tastendruck hinzufügen",
@@ -55,7 +60,10 @@
   "theme": "Design",
   "dark": "Dunkel",
   "light": "Hell",
-  "accent": "Akzentfarbe (Hex)",
+  "accent": "Akzentfarbe",
+  "accent_palette": "Farbpalette",
+  "custom_color": "Beliebige Akzentfarbe auswählen",
+  "accent_hint": "Wähle ein Farbfeld oder öffne den Farbwähler. Änderungen gelten sofort und werden automatisch gespeichert.",
   "appearance_hint": "Füge eine JSON-Übersetzung im Ordner locales des App-Konfigurationsverzeichnisses hinzu, um eine Sprache zu ergänzen.",
   "start_hotkey": "Start-Hotkey",
   "stop_hotkey": "Stopp-Hotkey",
@@ -68,5 +76,5 @@
   "save_error": "Einstellungen konnten nicht gespeichert werden",
   "interval_error": "Das Intervall muss mindestens 1 ms betragen.",
   "empty_sequence_error": "Füge mindestens eine aktive Aktion zur Sequenz hinzu.",
-  "updating": "Änderungen werden beim nächsten Start der Sequenz angewendet."
+  "updating": "Design und Akzentfarbe gelten sofort; Änderungen an der Automation beim nächsten Start der Sequenz."
 }

@@ -6,7 +6,7 @@ use keyboard_clicker::app::ClickerApp;
 fn main() -> eframe::Result<()> {
     let _ = env_logger::try_init();
     let options = eframe::NativeOptions {
-        initial_window_size: Some(Vec2::new(940.0, 720.0)),
+        initial_window_size: Some(Vec2::new(1120.0, 760.0)),
         min_window_size: Some(Vec2::new(760.0, 560.0)),
         ..Default::default()
     };
