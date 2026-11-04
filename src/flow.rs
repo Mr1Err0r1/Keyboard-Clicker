@@ -690,7 +690,15 @@ pub fn execute_flow(
                         ))
                     }
                 },
-                FlowNodeKind::End => break,
+                FlowNodeKind::End => {
+                    if let Some(frame) = loop_stack.last() {
+                        return Err(format!(
+                            "Flow reached End while repeat '{}' was still active; every repeat body path must reach its matching loop-end.",
+                            frame.node_id
+                        ));
+                    }
+                    break;
+                }
             }
         }
 
@@ -889,6 +897,10 @@ pub fn import_autoflow_json(json: &str) -> Result<FlowProgram, String> {
 
     let mut native_nodes = Vec::new();
     let mut mapped_ids: HashMap<&str, Vec<String>> = HashMap::new();
+    // Reserve every input id before generating ids for expanded multi-action
+    // nodes, so a later source node cannot collide with an earlier generated id.
+    let mut allocated_ids: HashSet<String> = source_ids.iter().map(|id| (*id).to_owned()).collect();
+    let mut generated_id_counter = 0_u32;
     for source in &document.nodes {
         let position = source.position.as_ref().map(|p| [p.x as f32, p.y as f32]);
         if position.is_some_and(|[x, y]| {
@@ -908,7 +920,7 @@ pub fn import_autoflow_json(json: &str) -> Result<FlowProgram, String> {
             let id = if index == 0 {
                 source.id.clone()
             } else {
-                format!("{}-{}", source.id, index)
+                unique_generated_id(&mut allocated_ids, &mut generated_id_counter)
             };
             validate_id(&id)?;
             let node_position = position.map(|[x, y]| [x + index as f32 * 48.0, y]);
@@ -951,7 +963,7 @@ pub fn import_autoflow_json(json: &str) -> Result<FlowProgram, String> {
         }
     }
 
-    let end_id = unique_end_id(&source_ids);
+    let end_id = unique_generated_id(&mut allocated_ids, &mut generated_id_counter);
     let terminal_nodes: Vec<String> = document
         .nodes
         .iter()
@@ -994,14 +1006,14 @@ pub fn import_autoflow_json(json: &str) -> Result<FlowProgram, String> {
     Ok(program)
 }
 
-fn unique_end_id(existing: &HashSet<&str>) -> String {
-    let mut id = "__flow_end".to_owned();
-    let mut suffix = 1_u32;
-    while existing.contains(id.as_str()) {
-        id = format!("__flow_end_{suffix}");
-        suffix += 1;
+fn unique_generated_id(allocated: &mut HashSet<String>, counter: &mut u32) -> String {
+    loop {
+        *counter = counter.saturating_add(1);
+        let candidate = format!("__autoflow_generated_{}", *counter);
+        if allocated.insert(candidate.clone()) {
+            return candidate;
+        }
     }
-    id
 }
 
 fn autoflow_actions(node: &AutoflowNode) -> Result<Vec<Action>, String> {
@@ -1251,6 +1263,19 @@ mod tests {
     }
 
     #[test]
+    fn generated_import_ids_never_collide_with_source_node_ids() {
+        let json = r#"{"version":"1.0","nodes":[
+          {"id":"keyboard","type":"keyboard","config":{"key":"A","text":"hello"},"nextNodeId":"keyboard-1"},
+          {"id":"keyboard-1","type":"delay","config":{"duration":5}}
+        ]}"#;
+        let flow = import_autoflow_json(json).unwrap();
+        let ids: HashSet<&str> = flow.nodes.iter().map(|node| node.id.as_str()).collect();
+        assert_eq!(ids.len(), flow.nodes.len());
+        assert!(ids.contains("keyboard-1"));
+        assert!(flow.validate().is_ok());
+    }
+
+    #[test]
     fn imports_mouse_move_click_and_terminal_connection() {
         let json = r#"{"version":"1.0","nodes":[
           {"id":"move","type":"move","position":{"x":0,"y":0},"config":{"x":640,"y":480,"duration":250},"nextNodeId":"click"},
@@ -1367,6 +1392,50 @@ mod tests {
         assert!(!summary.cancelled);
         assert_eq!(cycles, vec![1]);
         assert_eq!(host.actions.len(), 3);
+    }
+
+    #[test]
+    fn rejects_a_branch_that_ends_before_the_active_loop_end() {
+        let flow = FlowProgram {
+            schema_version: FLOW_SCHEMA_VERSION,
+            name: "early-end".into(),
+            entry_node_id: "repeat".into(),
+            variables: BTreeMap::new(),
+            nodes: vec![
+                node(
+                    "repeat",
+                    FlowNodeKind::Repeat {
+                        iterations: 2,
+                        counter_variable: None,
+                    },
+                ),
+                node(
+                    "condition",
+                    FlowNodeKind::Condition {
+                        left: Operand::Literal(FlowValue::Boolean(false)),
+                        comparison: Comparison::Equal,
+                        right: Operand::Literal(FlowValue::Boolean(true)),
+                    },
+                ),
+                node(
+                    "loop_end",
+                    FlowNodeKind::LoopEnd {
+                        repeat_node_id: "repeat".into(),
+                    },
+                ),
+                node("end", FlowNodeKind::End),
+            ],
+            edges: vec![
+                edge("repeat", FlowPort::Body, "condition"),
+                edge("repeat", FlowPort::Done, "end"),
+                edge("condition", FlowPort::True, "loop_end"),
+                edge("condition", FlowPort::False, "end"),
+            ],
+        };
+        assert!(flow.validate().is_ok());
+        let mut host = FakeHost::default();
+        let error = execute_flow(&flow, FlowRunOptions::default(), &mut host, |_| {}).unwrap_err();
+        assert!(error.contains("while repeat 'repeat' was still active"));
     }
 
     #[test]
