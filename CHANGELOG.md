@@ -5,6 +5,8 @@ This project follows Semantic Versioning. Each published release should include 
 ## [Unreleased]
 
 ### Added
+- A versioned graph runtime with validation, typed variables, comparisons, bounded repeats, explicit loop ends, and a cancellable background execution API.
+- A validated importer for the supplied Autoflow Designer 1.0 JSON actions, plus time-based mouse movement and deterministic fake-host runtime tests.
 - A free-positioning flow canvas with draggable, connected nodes; selecting a node opens its action editor and its layout is saved with settings.
 - A clickable accent-color palette and custom color picker with immediate theme preview.
 

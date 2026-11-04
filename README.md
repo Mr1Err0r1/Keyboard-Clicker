@@ -20,6 +20,10 @@ Build a connected automation diagram on the open flow canvas. Drag numbered node
 
 The editor saves settings automatically and can import/export validated JSON settings files for backup or sharing. Imported flows are limited to 256 steps and waits/holds of at most 24 hours each. Start and Stop remain available in the window, and global hotkeys work when supported by the desktop session. The automation runs in a separate worker; stop requests interrupt waits and held keys/buttons are released before the worker exits.
 
+### Graph runtime foundation
+
+The Rust library also provides a versioned, validated graph runtime for sequential actions, typed variables, comparisons, bounded repeat loops, explicit loop ends, cycle intervals, and cancellation. It can import the supplied Autoflow Designer 1.0 JSON format (click, move, keyboard, and delay nodes) through `keyboard_clicker::flow::import_autoflow_json`, then run a native `FlowProgram` in the background with `AutomationEngine::start_flow`. Imported data is treated strictly as data: the runtime does not execute scripts, shell commands, or arbitrary code. The current desktop editor still edits its existing linear sequence; hooking the richer graph model into the editor is a separate UI follow-up.
+
 The default global hotkeys are F6 to start and F7 to stop. Change them in Appearance; single keys and modifier combinations such as `Ctrl+F6` are supported. The start and stop shortcuts must be different. Start and Stop buttons remain available in the window if the desktop session does not allow global shortcuts.
 
 ### Appearance, languages, and settings

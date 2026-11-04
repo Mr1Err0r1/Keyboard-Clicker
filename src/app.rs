@@ -317,7 +317,7 @@ impl ClickerApp {
                     let step = &mut self.settings.sequence[index];
                     let action_title = match &step.action {
                         Action::MouseClick { .. } => tr("add_click"),
-                        Action::MouseMove { .. } => tr("add_move"),
+                        Action::MouseMove { .. } | Action::MouseMoveSmooth { .. } => tr("add_move"),
                         Action::KeyPress { .. } => tr("add_key"),
                         Action::TypeText { .. } => tr("add_text"),
                         Action::Wait { .. } => tr("add_wait"),
@@ -391,7 +391,8 @@ impl ClickerApp {
                                             });
                                             let current = match &step.action {
                                                 Action::MouseClick { .. } => 0,
-                                                Action::MouseMove { .. } => 1,
+                                                Action::MouseMove { .. }
+                                                | Action::MouseMoveSmooth { .. } => 1,
                                                 Action::KeyPress { .. } => 2,
                                                 Action::TypeText { .. } => 3,
                                                 Action::Wait { .. } => 4,
@@ -635,6 +636,42 @@ impl ClickerApp {
                                                         }
                                                     });
                                                     ui.label(RichText::new(tr("key_hint")).weak());
+                                                }
+                                                Action::MouseMoveSmooth {
+                                                    position,
+                                                    duration_ms,
+                                                } => {
+                                                    ui.label(RichText::new(tr("move_hint")).weak());
+                                                    ui.horizontal(|ui| {
+                                                        ui.label(tr("x"));
+                                                        if ui
+                                                            .add(egui::DragValue::new(
+                                                                &mut position[0],
+                                                            ))
+                                                            .changed()
+                                                        {
+                                                            self.dirty = true;
+                                                        }
+                                                        ui.label(tr("y"));
+                                                        if ui
+                                                            .add(egui::DragValue::new(
+                                                                &mut position[1],
+                                                            ))
+                                                            .changed()
+                                                        {
+                                                            self.dirty = true;
+                                                        }
+                                                        if ui
+                                                            .add(
+                                                                egui::DragValue::new(duration_ms)
+                                                                    .clamp_range(0..=120_000)
+                                                                    .suffix(" ms"),
+                                                            )
+                                                            .changed()
+                                                        {
+                                                            self.dirty = true;
+                                                        }
+                                                    });
                                                 }
                                                 Action::TypeText { text } => {
                                                     ui.label(tr("text"));
@@ -1130,6 +1167,15 @@ fn flow_node_detail(step: &SequenceStep, tr: &impl Fn(&str) -> String) -> String
         Action::MouseMove { position } => {
             format!("{} · {}, {}", tr("add_move"), position[0], position[1])
         }
+        Action::MouseMoveSmooth {
+            position,
+            duration_ms,
+        } => format!(
+            "{} · {}, {} · {duration_ms} ms",
+            tr("add_move"),
+            position[0],
+            position[1]
+        ),
         Action::KeyPress { key, .. } => format!("{} · {key}", tr("add_key")),
         Action::TypeText { text } => {
             format!("{} · {}", tr("add_text"), truncate_flow_label(text, 20))
@@ -1161,6 +1207,9 @@ impl eframe::App for ClickerApp {
             if event.id == self.stop_hotkey_id {
                 self.stop();
             }
+        }
+        if let Some(error) = self.state.take_error() {
+            self.message = Some((error, true));
         }
         theme::apply(ctx, &self.settings.theme, &self.settings.accent_hex);
         egui::TopBottomPanel::top("header").show(ctx, |ui| {
