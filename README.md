@@ -16,7 +16,7 @@ The Rust app targets 64-bit Windows 10/11 and x86_64 Linux. The default interfac
 
 ### Build automation sequences
 
-Build a connected, top-to-bottom flow of mouse clicks, mouse moves, key presses and combinations (for example `Ctrl+A`), text entry, and timed waits. Each numbered node can be enabled or disabled, edited, reordered, or removed. Set a delay after any action, then repeat a flow a chosen number of times or set the count to `0` to continue until stopped. Mouse clicks support left, right, and middle buttons, single/double clicks, held clicks, and optional fixed screen coordinates. Mouse-move nodes use explicit screen coordinates.
+Build a connected automation diagram on the open flow canvas. Drag numbered nodes to arrange the board; connections show the exact execution order, and selecting a node opens its action editor. Add mouse clicks, mouse moves, key presses and combinations (for example `Ctrl+A`), text entry, and timed waits. Enable or disable, reorder, and remove steps. Set a delay after any action, then repeat the flow a chosen number of times or set the count to `0` to continue until stopped. Mouse clicks support left, right, and middle buttons, single/double clicks, held clicks, and optional fixed screen coordinates. Mouse-move nodes use explicit screen coordinates.
 
 The editor saves settings automatically and can import/export validated JSON settings files for backup or sharing. Imported flows are limited to 256 steps and waits/holds of at most 24 hours each. Start and Stop remain available in the window, and global hotkeys work when supported by the desktop session. The automation runs in a separate worker; stop requests interrupt waits and held keys/buttons are released before the worker exits.
 
@@ -24,7 +24,7 @@ The default global hotkeys are F6 to start and F7 to stop. Change them in Appear
 
 ### Appearance, languages, and settings
 
-Choose a dark or light theme and set a custom six-digit HEX accent color. To add a language, place a UTF-8 JSON file such as `pt-BR.json` in the `locales` folder under the app's configuration directory. Use [`locales/en.json`](locales/en.json) as the key reference. Missing translation keys fall back to English; restart the app after adding a language.
+Choose a dark or light theme, pick an accent from the color palette, or use the custom color picker and six-digit HEX field. Accent and theme changes preview immediately and are saved automatically. To add a language, place a UTF-8 JSON file such as `pt-BR.json` in the `locales` folder under the app's configuration directory. Use [`locales/en.json`](locales/en.json) as the key reference. Missing translation keys fall back to English; restart the app after adding a language.
 
 Settings are stored in `settings.json` under `KeyboardClicker` in the current user's configuration directory: normally `%APPDATA%\KeyboardClicker` on Windows and `$XDG_CONFIG_HOME/KeyboardClicker` (usually `~/.config/KeyboardClicker`) on Linux. No administrator privileges are required.
 

@@ -4,6 +4,13 @@ This project follows Semantic Versioning. Each published release should include 
 
 ## [Unreleased]
 
+### Added
+- A free-positioning flow canvas with draggable, connected nodes; selecting a node opens its action editor and its layout is saved with settings.
+- A clickable accent-color palette and custom color picker with immediate theme preview.
+
+### Fixed
+- Theme and accent changes now update the active application visuals immediately and persist as expected.
+
 ## [2.1.0] - 2026-11-04
 
 ### Added
