@@ -1,10 +1,13 @@
-use crate::model::{Action, AppSettings, ClickType, MouseButton};
+use crate::{
+    flow::{execute_flow, FlowHost, FlowProgram, FlowRunOptions},
+    model::{Action, AppSettings, ClickType, MouseButton},
+};
 use enigo::{Enigo, Key, KeyboardControllable, MouseButton as EnigoMouseButton, MouseControllable};
 use std::{
     panic::{catch_unwind, AssertUnwindSafe},
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
-        Arc,
+        Arc, Mutex,
     },
     thread::{self, JoinHandle},
     time::{Duration, Instant},
@@ -14,6 +17,7 @@ use std::{
 pub struct EngineState {
     running: Arc<AtomicBool>,
     completed_cycles: Arc<AtomicU64>,
+    last_error: Arc<Mutex<Option<String>>>,
 }
 
 impl EngineState {
@@ -21,6 +25,7 @@ impl EngineState {
         Self {
             running: Arc::new(AtomicBool::new(false)),
             completed_cycles: Arc::new(AtomicU64::new(0)),
+            last_error: Arc::new(Mutex::new(None)),
         }
     }
     pub fn is_running(&self) -> bool {
@@ -28,6 +33,18 @@ impl EngineState {
     }
     pub fn completed_cycles(&self) -> u64 {
         self.completed_cycles.load(Ordering::Relaxed)
+    }
+    pub fn take_error(&self) -> Option<String> {
+        self.last_error
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take()
+    }
+    fn set_error(&self, error: String) {
+        *self
+            .last_error
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(error);
     }
     pub fn stop(&self) {
         self.running.store(false, Ordering::Release);
@@ -58,6 +75,49 @@ impl AutomationEngine {
 
     pub fn start(&mut self, settings: AppSettings) -> Result<(), String> {
         settings.validate()?;
+        self.spawn_worker("keyboard-clicker-engine", move |state| run(settings, state))
+    }
+
+    /// Validate and execute a graph program on the same cancellable background
+    /// worker used by the sequence editor.
+    pub fn start_flow(
+        &mut self,
+        program: FlowProgram,
+        options: FlowRunOptions,
+    ) -> Result<(), String> {
+        program.validate()?;
+        if options.interval_ms == 0 || options.interval_ms > crate::flow::MAX_INTERVAL_MS {
+            return Err(format!(
+                "Flow interval must be between 1 and {} ms.",
+                crate::flow::MAX_INTERVAL_MS
+            ));
+        }
+        if options.repeat_count > crate::flow::MAX_REPEAT_COUNT {
+            return Err(format!(
+                "Flow repeat count cannot exceed {}.",
+                crate::flow::MAX_REPEAT_COUNT
+            ));
+        }
+        self.spawn_worker("keyboard-clicker-flow", move |state| {
+            let mut host = EnigoFlowHost {
+                enigo: SafeEnigo::new(),
+                state: state.clone(),
+            };
+            let result = execute_flow(&program, options, &mut host, |cycles| {
+                state.completed_cycles.store(cycles, Ordering::Relaxed);
+            });
+            if let Err(error) = result {
+                state.set_error(error);
+            }
+            state.stop();
+        })
+    }
+
+    fn spawn_worker(
+        &mut self,
+        name: &'static str,
+        work: impl FnOnce(EngineState) + Send + 'static,
+    ) -> Result<(), String> {
         if self.state.is_running() {
             return Ok(());
         }
@@ -65,14 +125,20 @@ impl AutomationEngine {
             let _ = worker.join();
         }
         self.state.completed_cycles.store(0, Ordering::Relaxed);
+        *self
+            .state
+            .last_error
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
         self.state.running.store(true, Ordering::Release);
         let state = self.state.clone();
         self.worker = Some(
             thread::Builder::new()
-                .name("keyboard-clicker-engine".into())
+                .name(name.into())
                 .spawn(move || {
                     let panic_state = state.clone();
-                    if catch_unwind(AssertUnwindSafe(|| run(settings, state))).is_err() {
+                    if catch_unwind(AssertUnwindSafe(|| work(state))).is_err() {
+                        panic_state.set_error("The automation worker stopped unexpectedly.".into());
                         panic_state.stop();
                     }
                 })
@@ -104,8 +170,83 @@ impl Drop for AutomationEngine {
     }
 }
 
+/// Tracks held inputs and releases them on every worker exit, including panic
+/// unwinding. Each release is isolated so one backend panic cannot prevent the
+/// remaining keys/buttons from being released.
+struct SafeEnigo {
+    inner: Enigo,
+    held_keys: Vec<Key>,
+    held_buttons: Vec<EnigoMouseButton>,
+}
+
+impl SafeEnigo {
+    fn new() -> Self {
+        Self {
+            inner: Enigo::new(),
+            held_keys: Vec::new(),
+            held_buttons: Vec::new(),
+        }
+    }
+
+    fn key_down(&mut self, key: Key) {
+        if !self.held_keys.contains(&key) {
+            self.held_keys.push(key);
+        }
+        self.inner.key_down(key);
+    }
+
+    fn key_up(&mut self, key: Key) {
+        self.inner.key_up(key);
+        self.held_keys.retain(|held| *held != key);
+    }
+
+    fn mouse_down(&mut self, button: EnigoMouseButton) {
+        if !self.held_buttons.contains(&button) {
+            self.held_buttons.push(button);
+        }
+        self.inner.mouse_down(button);
+    }
+
+    fn mouse_up(&mut self, button: EnigoMouseButton) {
+        self.inner.mouse_up(button);
+        self.held_buttons.retain(|held| *held != button);
+    }
+}
+
+impl Drop for SafeEnigo {
+    fn drop(&mut self) {
+        for button in std::mem::take(&mut self.held_buttons).into_iter().rev() {
+            let _ = catch_unwind(AssertUnwindSafe(|| self.inner.mouse_up(button)));
+        }
+        for key in std::mem::take(&mut self.held_keys).into_iter().rev() {
+            let _ = catch_unwind(AssertUnwindSafe(|| self.inner.key_up(key)));
+        }
+    }
+}
+
+struct EnigoFlowHost {
+    enigo: SafeEnigo,
+    state: EngineState,
+}
+
+impl FlowHost for EnigoFlowHost {
+    fn is_cancelled(&self) -> bool {
+        !self.state.is_running()
+    }
+
+    fn execute_action(&mut self, action: &Action) -> Result<(), String> {
+        execute(&mut self.enigo, action, &self.state);
+        Ok(())
+    }
+
+    fn wait(&mut self, duration_ms: u64) -> Result<(), String> {
+        sleep_interruptible(Duration::from_millis(duration_ms), &self.state);
+        Ok(())
+    }
+}
+
 fn run(settings: AppSettings, state: EngineState) {
-    let mut enigo = Enigo::new();
+    let mut enigo = SafeEnigo::new();
     let mut cycle = 0_u64;
     while state.is_running() && (settings.repeat_count == 0 || cycle < settings.repeat_count) {
         let cycle_started = Instant::now();
@@ -136,7 +277,7 @@ fn run(settings: AppSettings, state: EngineState) {
     state.stop();
 }
 
-fn execute(enigo: &mut Enigo, action: &Action, state: &EngineState) {
+fn execute(enigo: &mut SafeEnigo, action: &Action, state: &EngineState) {
     match action {
         Action::MouseClick {
             button,
@@ -145,15 +286,20 @@ fn execute(enigo: &mut Enigo, action: &Action, state: &EngineState) {
             position,
         } => {
             if let Some([x, y]) = position {
-                enigo.mouse_move_to(*x, *y);
+                enigo.inner.mouse_move_to(*x, *y);
             }
             let button = to_enigo_button(*button);
             match click_type {
-                ClickType::Single => enigo.mouse_click(button),
+                ClickType::Single => {
+                    enigo.mouse_down(button);
+                    enigo.mouse_up(button);
+                }
                 ClickType::Double => {
-                    enigo.mouse_click(button);
+                    enigo.mouse_down(button);
+                    enigo.mouse_up(button);
                     if sleep_interruptible(Duration::from_millis(30), state) {
-                        enigo.mouse_click(button);
+                        enigo.mouse_down(button);
+                        enigo.mouse_up(button);
                     }
                 }
                 ClickType::Hold => {
@@ -165,8 +311,12 @@ fn execute(enigo: &mut Enigo, action: &Action, state: &EngineState) {
             }
         }
         Action::MouseMove { position } => {
-            enigo.mouse_move_to(position[0], position[1]);
+            enigo.inner.mouse_move_to(position[0], position[1]);
         }
+        Action::MouseMoveSmooth {
+            position,
+            duration_ms,
+        } => move_smoothly(enigo, *position, *duration_ms, state),
         Action::KeyPress { key, hold_ms } => {
             if let Some(keys) = to_enigo_combo(key) {
                 for key_code in &keys {
@@ -181,13 +331,36 @@ fn execute(enigo: &mut Enigo, action: &Action, state: &EngineState) {
                 sleep_interruptible(Duration::from_millis((*hold_ms).max(1)), state);
                 enigo.key_up(key_code);
             } else {
-                enigo.key_sequence(key);
+                enigo.inner.key_sequence(key);
             }
         }
-        Action::TypeText { text } => enigo.key_sequence(text),
+        Action::TypeText { text } => enigo.inner.key_sequence(text),
         Action::Wait { duration_ms } => {
             sleep_interruptible(Duration::from_millis(*duration_ms), state);
         }
+    }
+}
+
+fn move_smoothly(enigo: &mut SafeEnigo, target: [i32; 2], duration_ms: u64, state: &EngineState) {
+    if duration_ms == 0 {
+        enigo.inner.mouse_move_to(target[0], target[1]);
+        return;
+    }
+    let (start_x, start_y) = enigo.inner.mouse_location();
+    let steps = duration_ms.div_ceil(16).max(1);
+    let step_wait = Duration::from_millis((duration_ms / steps).max(1));
+    let dx = i64::from(target[0]) - i64::from(start_x);
+    let dy = i64::from(target[1]) - i64::from(start_y);
+    for step in 1..=steps {
+        if !sleep_interruptible(step_wait, state) {
+            return;
+        }
+        let progress = step as f64 / steps as f64;
+        let x = f64::from(start_x) + dx as f64 * progress;
+        let y = f64::from(start_y) + dy as f64 * progress;
+        enigo
+            .inner
+            .mouse_move_to(x.round() as i32, y.round() as i32);
     }
 }
 

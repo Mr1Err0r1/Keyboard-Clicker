@@ -30,6 +30,10 @@ pub enum Action {
     MouseMove {
         position: [i32; 2],
     },
+    MouseMoveSmooth {
+        position: [i32; 2],
+        duration_ms: u64,
+    },
     KeyPress {
         key: String,
         hold_ms: u64,
@@ -91,6 +95,7 @@ pub struct AppSettings {
 
 pub const MAX_SEQUENCE_STEPS: usize = 256;
 const MAX_ACTION_DURATION_MS: u64 = 86_400_000;
+pub const MAX_SMOOTH_MOVE_DURATION_MS: u64 = 120_000;
 
 impl Default for AppSettings {
     fn default() -> Self {
@@ -158,6 +163,14 @@ impl AppSettings {
                 Action::MouseClick { hold_ms, .. } if *hold_ms > MAX_ACTION_DURATION_MS => {
                     return Err(format!(
                         "Step {} mouse hold cannot exceed 24 hours.",
+                        index + 1
+                    ));
+                }
+                Action::MouseMoveSmooth { duration_ms, .. }
+                    if *duration_ms > MAX_SMOOTH_MOVE_DURATION_MS =>
+                {
+                    return Err(format!(
+                        "Step {} smooth mouse movement cannot exceed 2 minutes.",
                         index + 1
                     ));
                 }
