@@ -16,13 +16,13 @@ The Rust app targets 64-bit Windows 10/11 and x86_64 Linux. The default interfac
 
 ### Build automation sequences
 
-Build a connected automation diagram on the open flow canvas. Drag numbered nodes to arrange the board; connections show the exact execution order, and selecting a node opens its action editor. Add mouse clicks, mouse moves, key presses and combinations (for example `Ctrl+A`), text entry, and timed waits. Enable or disable, reorder, and remove steps. Set a delay after any action, then repeat the flow a chosen number of times or set the count to `0` to continue until stopped. Mouse clicks support left, right, and middle buttons, single/double clicks, held clicks, and optional fixed screen coordinates. Mouse-move nodes use explicit screen coordinates.
+The default Automation Studio edits and executes a connected graph. Drag nodes to arrange the canvas; select a node to edit its properties, or select an output port and a target card to connect nodes. Add mouse clicks, mouse moves, key presses and combinations (for example `Ctrl+A`), text entry, and timed waits. Flow-control nodes support conditions, typed variables, and bounded repeat loops. Import/export validated workflow JSON, including supported Autoflow Designer 1.0 action graphs. Set a cycle delay and repeat count, or use `0` to continue until stopped. Mouse clicks support left, right, and middle buttons, single/double clicks, held clicks, and optional fixed screen coordinates.
 
-The editor saves settings automatically and can import/export validated JSON settings files for backup or sharing. Imported flows are limited to 256 steps and waits/holds of at most 24 hours each. Start and Stop remain available in the window, and global hotkeys work when supported by the desktop session. The automation runs in a separate worker; stop requests interrupt waits and held keys/buttons are released before the worker exits.
+Studio saves its graph draft automatically and can import/export validated JSON workflows. Graphs support up to 256 executable steps plus a terminal node; waits and holds are bounded to 24 hours each. Studio and the Classic sequence editor keep separate workflows, which is called out in the UI; changing one does not silently overwrite the other. Start is disabled until the graph validates. Global hotkeys work when supported by the desktop session. The automation runs in a separate worker; stop requests interrupt waits and held keys/buttons are released before the worker exits.
 
 ### Graph runtime foundation
 
-The Rust library also provides a versioned, validated graph runtime for sequential actions, typed variables, comparisons, bounded repeat loops, explicit loop ends, cycle intervals, and cancellation. It can import the supplied Autoflow Designer 1.0 JSON format (click, move, keyboard, and delay nodes) through `keyboard_clicker::flow::import_autoflow_json`, then run a native `FlowProgram` in the background with `AutomationEngine::start_flow`. Imported data is treated strictly as data: the runtime does not execute scripts, shell commands, or arbitrary code. The current desktop editor still edits its existing linear sequence; hooking the richer graph model into the editor is a separate UI follow-up.
+The graph runtime validates flow structure, variable use, bounded loops, comparisons, node limits, cycle intervals, and cancellation. Autoflow Designer 1.0 JSON import is available through `keyboard_clicker::flow::import_autoflow_json`. Imported data is treated strictly as data: the runtime does not execute scripts, shell commands, or arbitrary code. The original linear sequence editor remains available as Classic mode for workflows kept there; it executes the Classic sequence rather than the Studio graph.
 
 The default global hotkeys are F6 to start and F7 to stop. Change them in Appearance; single keys and modifier combinations such as `Ctrl+F6` are supported. The start and stop shortcuts must be different. Start and Stop buttons remain available in the window if the desktop session does not allow global shortcuts.
 
@@ -54,7 +54,7 @@ cargo clippy --all-targets --locked -- -D warnings
 cargo build --release --locked
 ```
 
-The binary is written to `target/release/keyboard-clicker` on Linux and `target/release/keyboard-clicker.exe` on Windows. GitHub Actions tests both systems. Pushing a semantic version tag such as `v2.1.0` builds the direct Windows x64 executable, a Windows ZIP, and a Linux x86_64 tarball, with SHA-256 sidecars, and attaches them to a GitHub Release. See [`CHANGELOG.md`](CHANGELOG.md) and the version-matched notes under [`.github/release-notes`](.github/release-notes).
+The binary is written to `target/release/keyboard-clicker` on Linux and `target/release/keyboard-clicker.exe` on Windows. GitHub Actions tests both systems. Pushing a semantic version tag such as `v2.2.0` builds the direct Windows x64 executable, a Windows ZIP, and a Linux x86_64 tarball, with SHA-256 sidecars, and attaches them to a GitHub Release. See [`CHANGELOG.md`](CHANGELOG.md) and the version-matched notes under [`.github/release-notes`](.github/release-notes).
 
 ## Repository layout
 

@@ -4,7 +4,7 @@ This file is the canonical repository guide for AI coding agents. Read it before
 
 ## Project at a glance
 
-Keyboard Clicker is a desktop mouse/keyboard automation application. `main` contains the current Rust application (version `2.1.0`) and the preserved Python application. The original pre-Rust repository state is preserved on branch `old_original`; do not rewrite or delete that branch. The Rust app is the primary product direction. Python changes must be intentional and remain independent of Rust changes.
+Keyboard Clicker is a desktop mouse/keyboard automation application. The release branch prepares Rust application version `2.2.0` alongside the preserved Python application. The original pre-Rust repository state is preserved on branch `old_original`; do not rewrite or delete that branch. The Rust app is the primary product direction. Python changes must be intentional and remain independent of Rust changes.
 
 The default UI language is English, with German and Russian translations. The app targets x86_64 Windows 10/11 and x86_64 Linux. Linux input automation currently depends on X11; Wayland support is not guaranteed.
 
@@ -18,6 +18,7 @@ The default UI language is English, with German and Russian translations. The ap
 | `src/app.rs` | Main egui user interface, settings interaction, hotkey registration |
 | `src/model.rs` | Serializable legacy action-sequence and settings data model |
 | `src/flow.rs` | Versioned graph schema, validation, Autoflow JSON importer, bounded interpreter and fake-host tests |
+| `src/studio.rs` | Visual graph editor, node palette, canvas interactions, inspector, and flow import/export |
 | `src/engine.rs` | Background sequence/flow execution, Enigo input adapter, cancellation and worker lifecycle |
 | `src/config.rs` | Per-user settings path and persistence |
 | `src/i18n.rs` | Built-in/external locale loading and English fallback |
@@ -42,7 +43,7 @@ The old Rust prototypes were removed from active `src/` because the crate does n
 - Never commit secrets, credentials, personal settings, generated binaries, Cargo `target/`, Python caches, or local environment files.
 - Keep the dependency lockfile in sync when changing Rust dependencies; favor small, justified updates. Major upgrades of `eframe`, `enigo`, or `global-hotkey` may require source/API migrations and both-platform testing. Do not merge a version bump solely because Dependabot opened it.
 - Avoid unsafe input behavior. Automation must be user-configured, cancellable, and must release held keys/buttons when stopped or when an error occurs.
-- Keep imported flow files data-only: do not add arbitrary script/shell execution. Validate graph structure and resource limits before execution; graph loops must be explicit and bounded. The visible desktop editor currently still edits the legacy linear sequence, so keep graph-runtime and editor-schema work separately scoped.
+- Keep imported flow files data-only: do not add arbitrary script/shell execution. Validate graph structure and resource limits before execution; graph loops must be explicit and bounded. Studio and the Classic sequence editor store separate workflows; preserve that boundary or implement an explicit, loss-aware conversion before changing it.
 - Update the English, German, and Russian locale JSONs together for built-in UI text. Additional locales should fall back to English.
 - Update `README.md`, `CHANGELOG.md`, and release notes when user-visible behavior or release contents change.
 
