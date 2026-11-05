@@ -2,6 +2,13 @@
 
 This project follows Semantic Versioning. Each published release should include tested Windows and Linux artifacts.
 
+## [Unreleased]
+
+### Fixed
+- Restored the Automation Studio's separate vertical node palette, graph canvas, and properties inspector; compact widths preserve usable space for the canvas.
+- Added click-empty-to-clear selection, Escape to cancel a pending connection, and Delete/Backspace to remove the selected non-terminal node without deleting its terminal node or leaving dangling links.
+- Added direct workflow file export coverage for successful JSON round-trips and invalid-graph handling.
+
 ## [2.2.0] - 2026-11-05
 
 ### Added
