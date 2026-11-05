@@ -7,6 +7,18 @@ pub fn apply(ctx: &Context, theme: &str, accent_hex: &str) {
     } else {
         Visuals::dark()
     };
+    if theme != "light" {
+        visuals.window_fill = Color32::from_rgb(18, 24, 35);
+        visuals.panel_fill = Color32::from_rgb(18, 24, 35);
+        visuals.extreme_bg_color = Color32::from_rgb(13, 18, 29);
+        visuals.faint_bg_color = Color32::from_rgb(25, 33, 47);
+        visuals.widgets.noninteractive.bg_fill = Color32::from_rgb(24, 32, 46);
+        visuals.widgets.inactive.bg_fill = Color32::from_rgb(31, 41, 58);
+        visuals.widgets.noninteractive.bg_stroke =
+            Stroke::new(1.0_f32, Color32::from_rgb(42, 55, 74));
+        visuals.widgets.inactive.bg_stroke = Stroke::new(1.0_f32, Color32::from_rgb(51, 66, 88));
+        visuals.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, accent);
+    }
     visuals.selection.bg_fill = accent.linear_multiply(0.34);
     visuals.selection.stroke = Stroke::new(1.2_f32, accent);
     visuals.widgets.active.bg_fill = accent;

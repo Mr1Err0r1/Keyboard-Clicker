@@ -91,6 +91,9 @@ pub struct AppSettings {
     pub start_hotkey: String,
     pub stop_hotkey: String,
     pub sequence: Vec<SequenceStep>,
+    /// Optional serialized graph workflow, absent in older settings files.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flow_json: Option<String>,
 }
 
 pub const MAX_SEQUENCE_STEPS: usize = 256;
@@ -108,6 +111,7 @@ impl Default for AppSettings {
             start_hotkey: "F6".into(),
             stop_hotkey: "F7".into(),
             sequence: vec![SequenceStep::default()],
+            flow_json: None,
         }
     }
 }

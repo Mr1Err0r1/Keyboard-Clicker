@@ -2,12 +2,14 @@
 
 This project follows Semantic Versioning. Each published release should include tested Windows and Linux artifacts.
 
-## [Unreleased]
+## [2.2.0] - 2026-11-05
 
 ### Added
 - A versioned graph runtime with validation, typed variables, comparisons, bounded repeats, explicit loop ends, and a cancellable background execution API.
 - A validated importer for the supplied Autoflow Designer 1.0 JSON actions, plus time-based mouse movement and deterministic fake-host runtime tests.
-- A free-positioning flow canvas with draggable, connected nodes; selecting a node opens its action editor and its layout is saved with settings.
+- Automation Studio with a draggable connected graph canvas, node palette, editable action/control-node inspector, workflow import/export, persistent draft, and pre-run graph validation.
+- Studio can represent 256 legacy actions plus its terminal node without truncation; disabled legacy steps are not accidentally activated during migration.
+- Safe palette insertion on unambiguous end paths and explicit UI messaging for invalid graphs and the separate Classic sequence editor.
 - A clickable accent-color palette and custom color picker with immediate theme preview.
 
 ### Fixed
@@ -42,4 +44,5 @@ This project follows Semantic Versioning. Each published release should include 
 - Held mouse buttons and keyboard keys are released when a stop request arrives.
 - Mouse and keyboard actions execute serially in one sequence worker rather than racing in separate threads.
 
+[2.2.0]: https://github.com/Mr1Err0r1/Keyboard-Clicker/releases/tag/v2.2.0
 [2.0.0]: https://github.com/Mr1Err0r1/Keyboard-Clicker/releases/tag/v2.0.0

@@ -11,7 +11,8 @@ use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::time::Instant;
 
 pub const FLOW_SCHEMA_VERSION: u32 = 1;
-pub const MAX_FLOW_NODES: usize = 256;
+/// Allows 256 executable steps plus one terminal node in the visual editor.
+pub const MAX_FLOW_NODES: usize = 257;
 pub const MAX_FLOW_EDGES: usize = 512;
 pub const MAX_FLOW_VARIABLES: usize = 128;
 pub const MAX_FLOW_NAME_BYTES: usize = 128;

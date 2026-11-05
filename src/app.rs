@@ -1,8 +1,10 @@
 use crate::{
     config,
     engine::{AutomationEngine, EngineState},
+    flow::FlowRunOptions,
     i18n::Catalog,
     model::{Action, AppSettings, ClickType, MouseButton, SequenceStep, MAX_SEQUENCE_STEPS},
+    studio::{FlowStudio, StudioCommand},
     theme,
 };
 use eframe::egui::{self, Align2, Color32, FontId, Pos2, RichText, Stroke, Vec2};
@@ -29,11 +31,15 @@ pub struct ClickerApp {
     stop_hotkey_id: u32,
     dirty: bool,
     selected_step: usize,
+    studio: FlowStudio,
+    studio_mode: bool,
 }
 
 impl ClickerApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let settings = config::load();
+        let (studio, recovery_message) =
+            FlowStudio::new(settings.flow_json.as_deref(), &settings.sequence);
         let catalog = Catalog::load();
         theme::apply(&cc.egui_ctx, &settings.theme, &settings.accent_hex);
         let engine = AutomationEngine::new();
@@ -61,13 +67,15 @@ impl ClickerApp {
             engine,
             state,
             page: Page::Automation,
-            message: None,
+            message: recovery_message.map(|message| (message, true)),
             hotkey_manager,
             registered_hotkeys,
             start_hotkey_id,
             stop_hotkey_id,
             dirty: false,
             selected_step: 0,
+            studio,
+            studio_mode: true,
         }
     }
 
@@ -75,7 +83,18 @@ impl ClickerApp {
         self.catalog.text(&self.settings.locale, key)
     }
     fn start(&mut self) {
-        match self.engine.start(self.settings.clone()) {
+        let result = if self.studio_mode {
+            self.engine.start_flow(
+                self.studio.program.clone(),
+                FlowRunOptions {
+                    interval_ms: self.settings.interval_ms,
+                    repeat_count: self.settings.repeat_count,
+                },
+            )
+        } else {
+            self.engine.start(self.settings.clone())
+        };
+        match result {
             Ok(()) => self.message = None,
             Err(error) => self.message = Some((error, true)),
         }
@@ -124,6 +143,11 @@ impl ClickerApp {
             return;
         }
 
+        let (imported_studio, studio_warning) =
+            FlowStudio::new(imported.flow_json.as_deref(), &imported.sequence);
+        let has_studio_warning = studio_warning.is_some();
+        let import_message = studio_warning
+            .unwrap_or_else(|| format!("{}: {}", self.tr("imported"), path.display()));
         let previous = self.settings.clone();
         self.settings = imported;
         match self
@@ -133,10 +157,8 @@ impl ClickerApp {
             Ok(()) => {
                 self.dirty = false;
                 self.selected_step = 0;
-                self.message = Some((
-                    format!("{}: {}", self.tr("imported"), path.display()),
-                    false,
-                ));
+                self.studio = imported_studio;
+                self.message = Some((import_message, has_studio_warning));
             }
             Err(error) => {
                 self.settings = previous;
@@ -184,7 +206,54 @@ impl ClickerApp {
         Ok(())
     }
 
+    fn draw_studio(&mut self, ui: &mut egui::Ui) {
+        let catalog = self.catalog.clone();
+        let locale = self.settings.locale.clone();
+        let tr = |key: &str| catalog.text(&locale, key);
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(tr("studio_mode_note")).weak());
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button(tr("studio_classic")).clicked() {
+                    self.studio_mode = false;
+                }
+            });
+        });
+        ui.label(RichText::new(tr("studio_separate_classic")).small().weak());
+        let accent = theme::parse_color(&self.settings.accent_hex)
+            .unwrap_or(Color32::from_rgb(58, 166, 232));
+        let (command, changed) = self.studio.draw(
+            ui,
+            &tr,
+            accent,
+            self.state.is_running(),
+            self.state.completed_cycles(),
+            &mut self.settings.interval_ms,
+            &mut self.settings.repeat_count,
+        );
+        if changed {
+            self.dirty = true;
+        }
+        match command {
+            StudioCommand::None => {}
+            StudioCommand::Start => self.start(),
+            StudioCommand::Stop => self.stop(),
+            StudioCommand::Import => match self.studio.import_dialog() {
+                Ok(()) => self.dirty = true,
+                Err(error) => self.message = Some((error, true)),
+            },
+            StudioCommand::Export => {
+                if let Err(error) = self.studio.export_dialog() {
+                    self.message = Some((error, true));
+                }
+            }
+        }
+    }
+
     fn draw_automation(&mut self, ui: &mut egui::Ui) {
+        if self.studio_mode {
+            self.draw_studio(ui);
+            return;
+        }
         let catalog = self.catalog.clone();
         let locale = self.settings.locale.clone();
         let tr = |key: &str| catalog.text(&locale, key);
@@ -197,6 +266,9 @@ impl ClickerApp {
             };
             ui.label(RichText::new(format!("● {label}")).color(color).strong());
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button(tr("studio_open")).clicked() {
+                    self.studio_mode = true;
+                }
                 if self.state.is_running() {
                     if ui.button(tr("stop")).clicked() {
                         self.engine.stop();
@@ -208,6 +280,7 @@ impl ClickerApp {
                 }
             });
         });
+        ui.label(RichText::new(tr("studio_separate_classic")).small().weak());
         ui.add_space(4.0);
         ui.label(format!(
             "{}: {}",
@@ -1289,6 +1362,7 @@ impl eframe::App for ClickerApp {
             self.message = Some((self.tr("invalid_accent"), true));
         }
         if self.dirty && theme::parse_color(&self.settings.accent_hex).is_some() {
+            self.settings.flow_json = self.studio.draft_json();
             let hotkeys_result = self.configure_hotkeys();
             match hotkeys_result
                 .and_then(|()| config::save(&self.settings).map_err(|error| error.to_string()))
