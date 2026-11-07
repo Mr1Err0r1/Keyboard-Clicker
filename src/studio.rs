@@ -5,6 +5,7 @@ use crate::{
         MAX_FLOW_NODES, MAX_FLOW_VARIABLES,
     },
     model::{Action, ClickType, MouseButton, SequenceStep},
+    theme::{CanvasBackground, StudioAppearance, ThemeColors},
 };
 use eframe::egui::{self, Align2, Color32, FontId, Pos2, RichText, Stroke, Vec2};
 use std::{collections::HashSet, path::Path};
@@ -24,8 +25,13 @@ pub enum StudioCommand {
 pub struct FlowStudio {
     pub program: FlowProgram,
     pub selected_node_id: Option<String>,
+    selected_edge: Option<(String, FlowPort)>,
     connecting: Option<(String, FlowPort)>,
+    confirm_load_example: bool,
+    drag_origin: Option<(String, [f32; 2], Pos2)>,
     message: Option<(String, bool)>,
+    animation_time: f64,
+    last_frame_time: Option<f64>,
 }
 
 impl FlowStudio {
@@ -61,8 +67,13 @@ impl FlowStudio {
                             Self {
                                 program,
                                 selected_node_id,
+                                selected_edge: None,
                                 connecting: None,
+                                confirm_load_example: false,
+                                drag_origin: None,
                                 message: warning.map(|error| (error, true)),
+                                animation_time: 0.0,
+                                last_frame_time: None,
                             },
                             None,
                         );
@@ -151,8 +162,13 @@ impl FlowStudio {
                 edges,
             },
             selected_node_id: Some("legacy-0".into()),
+            selected_edge: None,
             connecting: None,
+            confirm_load_example: false,
+            drag_origin: None,
             message: None,
+            animation_time: 0.0,
+            last_frame_time: None,
         }
     }
 
@@ -182,6 +198,8 @@ impl FlowStudio {
         let program = FlowProgram::from_json(&contents)
             .or_else(|_| import_autoflow_json(&contents))
             .map_err(|error| format!("Could not import workflow: {error}"))?;
+        self.confirm_load_example = false;
+        self.drag_origin = None;
         self.selected_node_id = Some(program.entry_node_id.clone());
         self.program = program;
         self.connecting = None;
@@ -208,7 +226,7 @@ impl FlowStudio {
         &mut self,
         ui: &mut egui::Ui,
         tr: &impl Fn(&str) -> String,
-        accent: Color32,
+        appearance: StudioAppearance,
         locked: bool,
         completed_cycles: u64,
         interval_ms: &mut u64,
@@ -216,95 +234,113 @@ impl FlowStudio {
     ) -> (StudioCommand, bool) {
         let mut command = StudioCommand::None;
         let mut changed = false;
+        if locked {
+            self.confirm_load_example = false;
+            self.drag_origin = None;
+        }
+        let accent = appearance.colors.accent;
         egui::Frame::none()
+            .fill(appearance.colors.app_background)
             .inner_margin(egui::Margin::symmetric(18.0, 14.0))
             .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.vertical(|ui| {
-                        ui.label(
-                            RichText::new("AUTOMATION STUDIO")
-                                .small()
-                                .color(accent)
-                                .strong(),
-                        );
-                        changed |= ui
-                            .add(
-                                egui::TextEdit::singleline(&mut self.program.name)
-                                    .desired_width(250.0)
-                                    .font(egui::TextStyle::Heading),
-                            )
-                            .changed();
-                    });
-                    ui.separator();
-                    ui.label(
-                        RichText::new(format!("{} nodes", self.program.nodes.len()))
-                            .color(ui.visuals().weak_text_color()),
-                    );
-                    ui.label(
-                        RichText::new(format!("{} links", self.program.edges.len()))
-                            .color(ui.visuals().weak_text_color()),
-                    );
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if locked {
-                            if ui
+                ui.group(|ui| {
+                    ui.horizontal(|ui| {
+                        ui.vertical(|ui| {
+                            ui.label(
+                                RichText::new(tr("studio_title"))
+                                    .small()
+                                    .color(accent)
+                                    .strong(),
+                            );
+                            changed |= ui
                                 .add(
+                                    egui::TextEdit::singleline(&mut self.program.name)
+                                        .desired_width(250.0)
+                                        .font(egui::TextStyle::Heading),
+                                )
+                                .changed();
+                        });
+                        ui.separator();
+                        ui.label(
+                            RichText::new(format!(
+                                "{} {}",
+                                self.program.nodes.len(),
+                                tr("studio_nodes")
+                            ))
+                            .color(ui.visuals().weak_text_color()),
+                        );
+                        ui.label(
+                            RichText::new(format!(
+                                "{} {}",
+                                self.program.edges.len(),
+                                tr("studio_links")
+                            ))
+                            .color(ui.visuals().weak_text_color()),
+                        );
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if locked {
+                                if ui
+                                    .add(
+                                        egui::Button::new(
+                                            RichText::new(tr("stop")).color(Color32::WHITE),
+                                        )
+                                        .fill(Color32::from_rgb(190, 61, 74)),
+                                    )
+                                    .clicked()
+                                {
+                                    command = StudioCommand::Stop;
+                                }
+                            } else if ui
+                                .add_enabled(
+                                    self.program.validate().is_ok(),
                                     egui::Button::new(
-                                        RichText::new(format!("■  {}", tr("stop")))
+                                        RichText::new(format!("▶  {}", tr("start")))
                                             .color(Color32::WHITE),
                                     )
-                                    .fill(Color32::from_rgb(190, 61, 74)),
+                                    .fill(accent),
                                 )
                                 .clicked()
                             {
-                                command = StudioCommand::Stop;
+                                command = StudioCommand::Start;
                             }
-                        } else if ui
-                            .add_enabled(
-                                self.program.validate().is_ok(),
-                                egui::Button::new(
-                                    RichText::new(format!("▶  {}", tr("start")))
-                                        .color(Color32::WHITE),
-                                )
-                                .fill(accent),
-                            )
-                            .clicked()
-                        {
-                            command = StudioCommand::Start;
-                        }
-                        if ui.button(format!("↑  {}", tr("studio_export"))).clicked() {
-                            command = StudioCommand::Export;
-                        }
-                        if ui.button(format!("↓  {}", tr("studio_import"))).clicked() {
-                            command = StudioCommand::Import;
-                        }
-                        ui.separator();
-                        ui.label(format!("{}  {completed_cycles}", tr("status_cycles")));
+                            if ui.button(format!("↑  {}", tr("studio_export"))).clicked() {
+                                command = StudioCommand::Export;
+                            }
+                            if ui.button(format!("↓  {}", tr("studio_import"))).clicked() {
+                                command = StudioCommand::Import;
+                            }
+                            ui.separator();
+                            ui.label(format!("{}  {completed_cycles}", tr("status_cycles")));
+                        });
                     });
-                });
-                ui.add_space(10.0);
-                ui.horizontal(|ui| {
-                    ui.label(tr("cycle_interval"));
-                    changed |= ui
-                        .add(
-                            egui::DragValue::new(interval_ms)
-                                .clamp_range(1..=3_600_000)
-                                .suffix(" ms"),
-                        )
-                        .changed();
-                    ui.separator();
-                    ui.label(tr("repeat_count"));
-                    changed |= ui
-                        .add(egui::DragValue::new(repeat_count).clamp_range(0..=1_000_000_000_u64))
-                        .changed();
-                    ui.label(RichText::new("0 = until stopped").weak());
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if let Some((text, is_error)) = &self.message {
-                            if *is_error {
-                                ui.colored_label(Color32::LIGHT_RED, text);
-                            } else {
-                                ui.weak(text);
+                    ui.add_space(10.0);
+                    ui.horizontal(|ui| {
+                        ui.label(tr("cycle_interval"));
+                        changed |= ui
+                            .add(
+                                egui::DragValue::new(interval_ms)
+                                    .clamp_range(1..=3_600_000)
+                                    .suffix(" ms"),
+                            )
+                            .changed();
+                        ui.separator();
+                        ui.label(tr("repeat_count"));
+                        changed |= ui
+                            .add(
+                                egui::DragValue::new(repeat_count)
+                                    .clamp_range(0..=1_000_000_000_u64),
+                            )
+                            .changed();
+                        ui.label(RichText::new("0 = until stopped").weak());
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if let Some((text, is_error)) = &self.message {
+                                if *is_error {
+                                    ui.colored_label(Color32::LIGHT_RED, text);
+                                } else {
+                                    ui.weak(text);
+                                }
                             }
-                        }
+                        });
                     });
                 });
                 ui.add_space(12.0);
@@ -321,81 +357,110 @@ impl FlowStudio {
                         Vec2::new(left_width, height),
                         egui::Layout::top_down(egui::Align::Min),
                         |ui| {
-                            ui.label(RichText::new(tr("studio_palette")).strong());
-                            ui.label(
-                                RichText::new(tr("studio_actions"))
-                                    .small()
-                                    .color(accent)
-                                    .strong(),
-                            );
-                            ui.add_space(5.0);
-                            for (label, action) in palette_actions(tr) {
-                                if ui
-                                    .add_enabled(
-                                        self.program.nodes.len() < MAX_FLOW_NODES,
-                                        egui::Button::new(label)
-                                            .min_size(Vec2::new(ui.available_width(), 34.0)),
-                                    )
-                                    .clicked()
+                            ui.group(|ui| {
+                                ui.label(RichText::new(tr("studio_palette")).strong());
+                                ui.label(
+                                    RichText::new(tr("studio_actions"))
+                                        .small()
+                                        .color(accent)
+                                        .strong(),
+                                );
+                                ui.add_space(5.0);
+                                for (index, (label, action)) in
+                                    palette_actions(tr).into_iter().enumerate()
                                 {
-                                    self.add_action(action);
+                                    let color = match index {
+                                        0 => appearance.colors.accent,
+                                        1 => appearance.colors.move_node,
+                                        2 | 3 => appearance.colors.keyboard_node,
+                                        _ => appearance.colors.wait_node,
+                                    };
+                                    if palette_button(
+                                        ui,
+                                        &label,
+                                        index + 1,
+                                        color,
+                                        self.program.nodes.len() < MAX_FLOW_NODES,
+                                    ) {
+                                        self.add_action(action);
+                                        changed = true;
+                                    }
+                                }
+                                ui.add_space(14.0);
+                                ui.label(
+                                    RichText::new(tr("studio_control"))
+                                        .small()
+                                        .color(accent)
+                                        .strong(),
+                                );
+                                if palette_button(
+                                    ui,
+                                    &tr("studio_condition"),
+                                    6,
+                                    appearance.colors.condition_node,
+                                    self.program.nodes.len() < MAX_FLOW_NODES,
+                                ) {
+                                    self.add_condition();
                                     changed = true;
                                 }
-                            }
-                            ui.add_space(14.0);
-                            ui.label(
-                                RichText::new(tr("studio_control"))
-                                    .small()
-                                    .color(accent)
-                                    .strong(),
-                            );
-                            if ui
-                                .add_enabled(
-                                    self.program.nodes.len() < MAX_FLOW_NODES,
-                                    egui::Button::new(tr("studio_condition"))
-                                        .min_size(Vec2::new(ui.available_width(), 32.0)),
-                                )
-                                .clicked()
-                            {
-                                self.add_condition();
-                                changed = true;
-                            }
-                            if ui
-                                .add_enabled(
+                                if palette_button(
+                                    ui,
+                                    &tr("studio_repeat"),
+                                    7,
+                                    appearance.colors.loop_node,
                                     self.program.nodes.len() <= MAX_FLOW_NODES - 2,
-                                    egui::Button::new(tr("studio_repeat"))
-                                        .min_size(Vec2::new(ui.available_width(), 32.0)),
-                                )
-                                .clicked()
-                            {
-                                self.add_repeat();
-                                changed = true;
-                            }
-                            if ui
-                                .add_enabled(
+                                ) {
+                                    self.add_repeat();
+                                    changed = true;
+                                }
+                                if palette_button(
+                                    ui,
+                                    &tr("studio_set_variable"),
+                                    8,
+                                    appearance.colors.variable_node,
                                     self.program.nodes.len() < MAX_FLOW_NODES,
-                                    egui::Button::new(tr("studio_set_variable"))
-                                        .min_size(Vec2::new(ui.available_width(), 32.0)),
-                                )
-                                .clicked()
-                            {
-                                self.add_variable();
-                                changed = true;
-                            }
-                            ui.add_space(8.0);
-                            ui.label(RichText::new(tr("studio_palette_help")).small().weak());
-                            if self.connecting.is_some()
-                                && ui.button(tr("studio_cancel_connection")).clicked()
-                            {
-                                self.connecting = None;
-                            }
-                            ui.add_space(12.0);
-                            ui.label(
-                                RichText::new(format!("0 = {}", tr("studio_until_stopped")))
-                                    .small()
-                                    .weak(),
-                            );
-                            ui.label(RichText::new(format!("F7  {}", tr("stop"))).small().weak());
+                                ) {
+                                    self.add_variable();
+                                    changed = true;
+                                }
+                                ui.add_space(8.0);
+                                ui.label(RichText::new(tr("studio_palette_help")).small().weak());
+                                if self.confirm_load_example {
+                                    ui.colored_label(
+                                        appearance.colors.warning,
+                                        tr("studio_example_replace_warning"),
+                                    );
+                                    ui.horizontal(|ui| {
+                                        if ui.button(tr("studio_example_confirm")).clicked() {
+                                            self.load_example(tr);
+                                            changed = true;
+                                        }
+                                        if ui.button(tr("studio_example_cancel")).clicked() {
+                                            self.confirm_load_example = false;
+                                        }
+                                    });
+                                } else if ui
+                                    .add_enabled(
+                                        !locked,
+                                        egui::Button::new(tr("studio_load_example")),
+                                    )
+                                    .on_hover_text(tr("studio_load_example_hint"))
+                                    .clicked()
+                                {
+                                    self.confirm_load_example = true;
+                                }
+                                if self.connecting.is_some()
+                                    && ui.button(tr("studio_cancel_connection")).clicked()
+                                {
+                                    self.connecting = None;
+                                }
+                                ui.add_space(12.0);
+                                ui.label(
+                                    RichText::new(format!("0 = {}", tr("studio_until_stopped")))
+                                        .small()
+                                        .weak(),
+                                );
+                            });
                         },
                     );
                     ui.separator();
@@ -403,36 +468,52 @@ impl FlowStudio {
                         Vec2::new(center_width, height),
                         egui::Layout::top_down(egui::Align::Min),
                         |ui| {
-                            ui.horizontal(|ui| {
-                                ui.label(RichText::new(tr("studio_canvas")).strong());
-                                if !compact {
-                                    ui.with_layout(
-                                        egui::Layout::right_to_left(egui::Align::Center),
-                                        |ui| {
-                                            if self.connecting.is_some() {
-                                                ui.colored_label(accent, tr("studio_connecting"));
-                                            } else {
-                                                ui.weak(tr("studio_canvas_hint"));
-                                            }
-                                        },
-                                    );
+                            ui.group(|ui| {
+                                ui.horizontal(|ui| {
+                                    ui.label(RichText::new(tr("studio_canvas")).strong());
+                                    if !compact {
+                                        ui.with_layout(
+                                            egui::Layout::right_to_left(egui::Align::Center),
+                                            |ui| {
+                                                if self.connecting.is_some() {
+                                                    ui.colored_label(
+                                                        accent,
+                                                        tr("studio_connecting"),
+                                                    );
+                                                } else {
+                                                    ui.weak(tr("studio_canvas_hint"));
+                                                }
+                                            },
+                                        );
+                                    }
+                                });
+                                if compact {
+                                    if self.connecting.is_some() {
+                                        ui.colored_label(accent, tr("studio_connecting"));
+                                    } else {
+                                        ui.weak(tr("studio_canvas_hint"));
+                                    }
+                                }
+                                ui.add_space(6.0);
+                                changed |= self.draw_canvas(ui, tr, appearance, locked);
+                                match self.program.validate() {
+                                    Ok(()) => {
+                                        ui.colored_label(
+                                            appearance.colors.success,
+                                            format!("OK  {}", tr("studio_workflow_ready")),
+                                        );
+                                    }
+                                    Err(error) => {
+                                        ui.colored_label(
+                                            appearance.colors.warning,
+                                            format!(
+                                                "!  {}: {error}",
+                                                tr("studio_workflow_attention")
+                                            ),
+                                        );
+                                    }
                                 }
                             });
-                            if compact {
-                                if self.connecting.is_some() {
-                                    ui.colored_label(accent, tr("studio_connecting"));
-                                } else {
-                                    ui.weak(tr("studio_canvas_hint"));
-                                }
-                            }
-                            ui.add_space(6.0);
-                            changed |= self.draw_canvas(ui, tr, accent, locked);
-                            if let Err(error) = self.program.validate() {
-                                ui.colored_label(
-                                    Color32::LIGHT_RED,
-                                    format!("{}: {error}", tr("studio_validation_error")),
-                                );
-                            }
                         },
                     );
                     ui.separator();
@@ -440,14 +521,88 @@ impl FlowStudio {
                         Vec2::new(right_width, height),
                         egui::Layout::top_down(egui::Align::Min),
                         |ui| {
-                            ui.label(RichText::new(tr("studio_inspector")).strong());
-                            ui.add_space(8.0);
-                            changed |= self.draw_inspector(ui, tr, accent, locked);
+                            ui.group(|ui| {
+                                ui.label(RichText::new(tr("studio_inspector")).strong());
+                                ui.add_space(8.0);
+                                changed |= self.draw_inspector(ui, tr, appearance, locked);
+                            });
                         },
                     );
                 });
             });
         (command, changed)
+    }
+
+    fn load_example(&mut self, tr: &impl Fn(&str) -> String) {
+        let action_node = |id: &str, label_key: &str, position: [f32; 2], action| FlowNode {
+            id: id.to_owned(),
+            label: tr(label_key),
+            position: Some(position),
+            kind: FlowNodeKind::Action {
+                action,
+                delay_after_ms: 0,
+            },
+        };
+        let ids = [
+            "sample-move-a",
+            "sample-wait",
+            "sample-move-b",
+            "sample-end",
+        ];
+        let nodes = vec![
+            action_node(
+                ids[0],
+                "studio_example_move_a",
+                [40.0, 140.0],
+                Action::MouseMoveSmooth {
+                    position: [320, 240],
+                    duration_ms: 450,
+                },
+            ),
+            action_node(
+                ids[1],
+                "studio_example_pause",
+                [280.0, 140.0],
+                Action::Wait { duration_ms: 500 },
+            ),
+            action_node(
+                ids[2],
+                "studio_example_move_b",
+                [520.0, 140.0],
+                Action::MouseMoveSmooth {
+                    position: [600, 360],
+                    duration_ms: 450,
+                },
+            ),
+            FlowNode {
+                id: ids[3].to_owned(),
+                label: tr("studio_end_node"),
+                position: Some([760.0, 140.0]),
+                kind: FlowNodeKind::End,
+            },
+        ];
+        let edges = ids
+            .windows(2)
+            .map(|pair| FlowEdge {
+                from_node_id: pair[0].to_owned(),
+                port: FlowPort::Next,
+                to_node_id: pair[1].to_owned(),
+            })
+            .collect();
+        self.program = FlowProgram {
+            schema_version: FLOW_SCHEMA_VERSION,
+            name: tr("studio_example_name"),
+            entry_node_id: ids[0].to_owned(),
+            variables: Default::default(),
+            nodes,
+            edges,
+        };
+        self.selected_node_id = Some(ids[0].to_owned());
+        self.selected_edge = None;
+        self.connecting = None;
+        self.confirm_load_example = false;
+        self.drag_origin = None;
+        self.message = None;
     }
 
     fn add_action(&mut self, action: Action) {
@@ -730,28 +885,92 @@ impl FlowStudio {
             }
         }
         self.selected_node_id = None;
+        self.selected_edge = None;
         true
+    }
+
+    fn delete_selected_edge(&mut self) -> bool {
+        let Some((from_node_id, port)) = self.selected_edge.take() else {
+            return false;
+        };
+        let old_len = self.program.edges.len();
+        self.program
+            .edges
+            .retain(|edge| !(edge.from_node_id == from_node_id && edge.port == port));
+        old_len != self.program.edges.len()
+    }
+
+    fn advance_animation_clock(&mut self, frame_time: f64, enabled: bool) {
+        if let Some(previous) = self.last_frame_time {
+            if enabled {
+                self.animation_time += (frame_time - previous).clamp(0.0, 0.1);
+            }
+        }
+        self.last_frame_time = Some(frame_time);
     }
 
     fn draw_canvas(
         &mut self,
         ui: &mut egui::Ui,
         tr: &impl Fn(&str) -> String,
-        accent: Color32,
+        appearance: StudioAppearance,
         locked: bool,
     ) -> bool {
         let mut changed = false;
+        let accent = appearance.colors.accent;
+        let frame_time = ui.input(|input| input.time);
+        self.advance_animation_clock(frame_time, appearance.background_animations);
         if !ui.ctx().wants_keyboard_input() {
-            if ui.input(|input| input.key_pressed(egui::Key::Escape))
-                && self.connecting.take().is_some()
-            {
-                changed = true;
+            if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
+                changed |= self.connecting.take().is_some();
+                changed |= self.selected_node_id.take().is_some();
+                changed |= self.selected_edge.take().is_some();
+            }
+            if !locked {
+                let shortcut = ui.input(|input| {
+                    [
+                        egui::Key::Num1,
+                        egui::Key::Num2,
+                        egui::Key::Num3,
+                        egui::Key::Num4,
+                        egui::Key::Num5,
+                        egui::Key::Num6,
+                        egui::Key::Num7,
+                        egui::Key::Num8,
+                    ]
+                    .iter()
+                    .position(|key| input.key_pressed(*key))
+                    .map(|index| index + 1)
+                });
+                if let Some(shortcut) = shortcut {
+                    match shortcut {
+                        1..=5 => {
+                            if let Some((_, action)) = palette_actions(tr).get(shortcut - 1) {
+                                self.add_action(action.clone());
+                                changed = true;
+                            }
+                        }
+                        6 => {
+                            self.add_condition();
+                            changed = true;
+                        }
+                        7 => {
+                            self.add_repeat();
+                            changed = true;
+                        }
+                        8 => {
+                            self.add_variable();
+                            changed = true;
+                        }
+                        _ => {}
+                    }
+                }
             }
             if !locked
                 && (ui.input(|input| input.key_pressed(egui::Key::Delete))
                     || ui.input(|input| input.key_pressed(egui::Key::Backspace)))
             {
-                changed |= self.delete_selected_node();
+                changed |= self.delete_selected_edge() || self.delete_selected_node();
             }
         }
         let mut canvas_width = 1100.0_f32;
@@ -776,27 +995,18 @@ impl FlowStudio {
                 let size = Vec2::new(canvas_width, canvas_height);
                 let (canvas, canvas_response) = ui.allocate_exact_size(size, egui::Sense::click());
                 let painter = ui.painter_at(canvas);
-                let background = Color32::from_rgb(13, 18, 29);
-                painter.rect_filled(canvas, 8.0, background);
-                painter.rect_stroke(
-                    canvas,
-                    8.0,
-                    Stroke::new(1.0_f32, Color32::from_rgb(35, 47, 65)),
-                );
+                let palette = appearance.colors;
+                painter.rect_filled(canvas, 8.0, palette.canvas);
+                painter.rect_stroke(canvas, 8.0, Stroke::new(1.0_f32, palette.border));
                 let clip = painter.clip_rect().intersect(canvas);
-                let start_x = ((clip.left() - canvas.left()).max(0.0) / 24.0).floor() as i32;
-                let end_x = ((clip.right() - canvas.left()).max(0.0) / 24.0).ceil() as i32;
-                let start_y = ((clip.top() - canvas.top()).max(0.0) / 24.0).floor() as i32;
-                let end_y = ((clip.bottom() - canvas.top()).max(0.0) / 24.0).ceil() as i32;
-                for x in start_x..=end_x {
-                    for y in start_y..=end_y {
-                        painter.circle_filled(
-                            canvas.min + Vec2::new(x as f32 * 24.0, y as f32 * 24.0),
-                            1.0,
-                            Color32::from_rgb(43, 56, 77),
-                        );
-                    }
-                }
+                paint_canvas_background(
+                    &painter,
+                    canvas,
+                    clip,
+                    appearance,
+                    self.animation_time as f32,
+                );
+                let time = ui.input(|input| input.time) as f32;
                 for edge in &self.program.edges {
                     if let (Some(source), Some(target)) = (
                         self.program
@@ -810,21 +1020,32 @@ impl FlowStudio {
                     ) {
                         let from = output_position(source, edge.port, canvas.min);
                         let to = input_position(target, canvas.min);
-                        paint_connection(&painter, from, to, accent, 2.2);
-                        let label = match edge.port {
-                            FlowPort::True => Some("T"),
-                            FlowPort::False => Some("F"),
-                            FlowPort::Body => Some("loop"),
-                            FlowPort::Done => Some("done"),
-                            FlowPort::Next => None,
-                        };
-                        if let Some(label) = label {
+                        let selected = self.selected_edge.as_ref()
+                            == Some(&(edge.from_node_id.clone(), edge.port));
+                        let color = if selected { palette.warning } else { accent };
+                        paint_connection(
+                            &painter,
+                            from,
+                            to,
+                            color,
+                            if selected { 2.8 } else { 1.8 },
+                            appearance.glow_strength,
+                        );
+                        if appearance.animated_edges && !selected {
+                            let phase = (time * 0.22).fract();
+                            painter.circle_filled(
+                                bezier_point(from, to, phase),
+                                3.0,
+                                with_alpha(color, 0.9),
+                            );
+                        }
+                        if edge.port != FlowPort::Next {
                             painter.text(
                                 from.lerp(to, 0.5) + Vec2::new(0.0, -10.0),
                                 Align2::CENTER_CENTER,
-                                label,
+                                port_label(edge.port, tr),
                                 FontId::proportional(10.0),
-                                accent,
+                                palette.text,
                             );
                         }
                     }
@@ -844,8 +1065,16 @@ impl FlowStudio {
                     };
                     let response =
                         ui.interact(rect, ui.id().with(("studio-node", id.clone())), sense);
+                    if response.drag_started() && !locked && self.connecting.is_none() {
+                        let pointer_origin = ui
+                            .input(|input| input.pointer.press_origin())
+                            .or_else(|| response.interact_pointer_pos())
+                            .unwrap_or(canvas.min);
+                        self.drag_origin = Some((id.clone(), position, pointer_origin));
+                    }
                     if response.clicked() {
                         node_clicked = true;
+                        self.selected_edge = None;
                         if let Some((from_id, port)) = self.connecting.take() {
                             if from_id != id {
                                 self.program.edges.retain(|edge| {
@@ -864,30 +1093,56 @@ impl FlowStudio {
                             self.selected_node_id = Some(id.clone());
                         }
                     }
-                    if response.dragged() && !locked && self.connecting.is_none() {
-                        let delta = ui.input(|input| input.pointer.delta());
-                        let x = (position[0] + delta.x).clamp(16.0, CANVAS_LIMIT - NODE_SIZE.x);
-                        let y = (position[1] + delta.y).clamp(16.0, CANVAS_LIMIT - NODE_SIZE.y);
-                        self.program.nodes[index].position = Some([x, y]);
+                    if (response.dragged() || response.drag_released())
+                        && !locked
+                        && self.connecting.is_none()
+                    {
+                        let (start_position, start_pointer) = self
+                            .drag_origin
+                            .as_ref()
+                            .filter(|(dragged_id, _, _)| dragged_id == &id)
+                            .map(|(_, start_position, start_pointer)| {
+                                (*start_position, *start_pointer)
+                            })
+                            .unwrap_or((
+                                position,
+                                response.interact_pointer_pos().unwrap_or(canvas.min),
+                            ));
+                        let current_pointer =
+                            response.interact_pointer_pos().unwrap_or(start_pointer);
+                        self.program.nodes[index].position = Some(drag_position(
+                            start_position,
+                            start_pointer,
+                            current_pointer,
+                            appearance.snap_to_grid,
+                        ));
                         changed = true;
                     }
+                    if response.drag_released() {
+                        self.drag_origin = None;
+                    }
                     let kind = self.program.nodes[index].kind.clone();
-                    let fill = if is_selected {
-                        Color32::from_rgb(29, 45, 65)
-                    } else {
-                        Color32::from_rgb(24, 32, 46)
-                    };
-                    let category = node_color(&kind, accent);
-                    painter.rect_filled(rect, 9.0, fill);
+                    let category = node_color(&kind, &palette);
+                    if appearance.glow_strength > 0.01 {
+                        painter.rect_filled(
+                            rect.expand(if is_selected { 5.0 } else { 2.0 }),
+                            12.0,
+                            with_alpha(
+                                category,
+                                appearance.glow_strength * if is_selected { 0.23 } else { 0.08 },
+                            ),
+                        );
+                    }
+                    painter.rect_filled(rect, 9.0, palette.panel_alt);
                     painter.rect_stroke(
                         rect,
                         9.0,
                         Stroke::new(
                             if is_selected { 2.0_f32 } else { 1.0_f32 },
                             if is_selected {
-                                accent
+                                category
                             } else {
-                                Color32::from_rgb(48, 63, 84)
+                                palette.border
                             },
                         ),
                     );
@@ -900,19 +1155,38 @@ impl FlowStudio {
                         category,
                     );
                     let (title, detail) = node_text(&self.program.nodes[index], tr);
+                    let icon_rect = egui::Rect::from_min_size(
+                        rect.left_top() + Vec2::new(14.0, 14.0),
+                        Vec2::splat(28.0),
+                    );
+                    painter.rect_filled(icon_rect, 6.0, with_alpha(category, 0.18));
                     painter.text(
-                        rect.left_top() + Vec2::new(16.0, 16.0),
-                        Align2::LEFT_TOP,
-                        title,
-                        FontId::proportional(14.0),
+                        icon_rect.center(),
+                        Align2::CENTER_CENTER,
+                        node_glyph(&kind),
+                        FontId::proportional(16.0),
                         category,
                     );
                     painter.text(
-                        rect.left_top() + Vec2::new(16.0, 43.0),
+                        rect.left_top() + Vec2::new(52.0, 14.0),
                         Align2::LEFT_TOP,
-                        detail,
-                        FontId::proportional(11.5),
-                        ui.visuals().text_color(),
+                        truncate(&title, 18),
+                        FontId::proportional(14.0),
+                        palette.text,
+                    );
+                    painter.text(
+                        rect.right_top() - Vec2::new(28.0, -17.0),
+                        Align2::CENTER_CENTER,
+                        format!("#{}", index + 1),
+                        FontId::monospace(9.0),
+                        palette.muted,
+                    );
+                    painter.text(
+                        rect.left_top() + Vec2::new(16.0, 56.0),
+                        Align2::LEFT_TOP,
+                        truncate(&detail, 30),
+                        FontId::proportional(11.0),
+                        palette.muted,
                     );
                     if let Some(outputs) = output_ports(&kind) {
                         for (port_index, port) in outputs.iter().copied().enumerate() {
@@ -924,31 +1198,35 @@ impl FlowStudio {
                                 ui.id().with(("studio-port", id.clone(), port)),
                                 egui::Sense::click(),
                             );
-                            painter.circle_filled(point, 5.5, category);
-                            painter.circle_stroke(point, 5.5, Stroke::new(1.2_f32, background));
-                            let label = match port {
-                                FlowPort::Next => "→",
-                                FlowPort::True => "✓",
-                                FlowPort::False => "×",
-                                FlowPort::Body => "↻",
-                                FlowPort::Done => "✓",
-                            };
+                            let is_connected = self
+                                .program
+                                .edges
+                                .iter()
+                                .any(|edge| edge.from_node_id == id && edge.port == port);
+                            painter.circle_filled(
+                                point,
+                                if is_connected { 5.5 } else { 6.5 },
+                                category,
+                            );
+                            painter.circle_stroke(point, 5.5, Stroke::new(1.2_f32, palette.canvas));
+                            let label = port_label(port, tr);
                             painter.text(
                                 point + Vec2::new(0.0, 16.0 + port_index as f32 * 0.0),
                                 Align2::CENTER_TOP,
-                                label,
+                                &label,
                                 FontId::proportional(10.0),
                                 ui.visuals().weak_text_color(),
                             );
                             if port_response.clicked() && !locked {
                                 node_clicked = true;
+                                self.selected_edge = None;
                                 self.selected_node_id = Some(id.clone());
                                 new_connection = Some((id.clone(), port));
                             }
                         }
                     }
                     let input = input_position(&self.program.nodes[index], canvas.min);
-                    painter.circle_filled(input, 4.0, Color32::from_rgb(112, 132, 156));
+                    painter.circle_filled(input, 4.0, palette.muted);
                     response.on_hover_text(if self.connecting.is_some() {
                         tr("studio_click_target")
                     } else {
@@ -956,9 +1234,18 @@ impl FlowStudio {
                     });
                 }
                 if canvas_response.clicked() && !node_clicked {
-                    let selection_cleared = self.selected_node_id.take().is_some();
-                    let connection_cleared = self.connecting.take().is_some();
-                    if selection_cleared || connection_cleared {
+                    if let Some(pointer) = ui.input(|input| input.pointer.interact_pos()) {
+                        if let Some((from_node_id, port, _)) =
+                            nearest_edge(&self.program, canvas.min, pointer)
+                        {
+                            self.selected_node_id = None;
+                            self.connecting = None;
+                            self.selected_edge = Some((from_node_id, port));
+                        } else {
+                            self.selected_node_id = None;
+                            self.selected_edge = None;
+                            self.connecting = None;
+                        }
                         changed = true;
                     }
                 }
@@ -971,24 +1258,87 @@ impl FlowStudio {
                     {
                         let from = output_position(source, *port, canvas.min);
                         if let Some(pointer) = ui.input(|input| input.pointer.hover_pos()) {
-                            paint_connection(&painter, from, pointer, accent, 1.4);
+                            paint_connection(
+                                &painter,
+                                from,
+                                pointer,
+                                accent,
+                                1.4,
+                                appearance.glow_strength,
+                            );
                         }
                     }
                 }
+                if appearance.crt_overlay {
+                    let mut y = clip.top();
+                    while y < clip.bottom() {
+                        painter.line_segment(
+                            [Pos2::new(clip.left(), y), Pos2::new(clip.right(), y)],
+                            Stroke::new(1.0_f32, with_alpha(palette.app_background, 0.14)),
+                        );
+                        y += 4.0;
+                    }
+                }
             });
+        if (appearance.animated_edges && !self.program.edges.is_empty())
+            || (appearance.background_animations && appearance.background_intensity > 0.0)
+        {
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(50));
+        }
         if let Some((text, _)) = self.message.as_ref() {
             ui.label(RichText::new(text).small());
         }
         changed
     }
 
+    fn draw_edge_inspector(
+        &mut self,
+        ui: &mut egui::Ui,
+        tr: &impl Fn(&str) -> String,
+        locked: bool,
+        source_id: &str,
+        port: FlowPort,
+    ) -> bool {
+        let target_id = self
+            .program
+            .edges
+            .iter()
+            .find(|edge| edge.from_node_id == source_id && edge.port == port)
+            .map(|edge| edge.to_node_id.clone());
+        ui.label(RichText::new(tr("studio_connection_properties")).strong());
+        ui.add_space(10.0);
+        ui.label(format!("{} · {}", tr("studio_node_label"), source_id));
+        ui.label(format!("{} · {}", tr("port_label"), port_label(port, tr)));
+        if let Some(target_id) = target_id {
+            ui.label(format!("{} · {}", tr("studio_connected_to"), target_id));
+        }
+        ui.add_space(12.0);
+        ui.add_enabled_ui(!locked, |ui| {
+            if ui
+                .button(format!("X  {}", tr("studio_remove_connection")))
+                .clicked()
+            {
+                return self.delete_selected_edge();
+            }
+            false
+        })
+        .inner
+    }
+
     fn draw_inspector(
         &mut self,
         ui: &mut egui::Ui,
         tr: &impl Fn(&str) -> String,
-        accent: Color32,
+        appearance: StudioAppearance,
         locked: bool,
     ) -> bool {
+        if self.selected_node_id.is_none() {
+            if let Some((source_id, port)) = self.selected_edge.clone() {
+                return self.draw_edge_inspector(ui, tr, locked, &source_id, port);
+            }
+        }
+        let accent = appearance.colors.accent;
         let Some(id) = self.selected_node_id.clone() else {
             ui.add_space(12.0);
             ui.label(RichText::new(tr("studio_select_hint")).weak());
@@ -1017,10 +1367,16 @@ impl FlowStudio {
                     egui::ComboBox::from_id_source(("studio-action-kind", id.as_str()))
                         .selected_text(action_kind_label(action, tr))
                         .show_ui(ui, |ui| {
-                            for (i, key) in
-                                ["add_click", "add_move", "add_key", "add_text", "add_wait"]
-                                    .iter()
-                                    .enumerate()
+                            for (i, key) in [
+                                "add_click",
+                                "add_move",
+                                "add_move_smooth",
+                                "add_key",
+                                "add_text",
+                                "add_wait",
+                            ]
+                            .iter()
+                            .enumerate()
                             {
                                 if ui.selectable_label(current == i, tr(key)).clicked() {
                                     *action = default_action(i);
@@ -1035,33 +1391,38 @@ impl FlowStudio {
                             hold_ms,
                             position,
                         } => {
+                            ui.label(tr("button"));
                             egui::ComboBox::from_id_source(("studio-button", id.as_str()))
-                                .selected_text(format!("{:?}", button))
+                                .selected_text(tr(match button {
+                                    MouseButton::Left => "button_left",
+                                    MouseButton::Right => "button_right",
+                                    MouseButton::Middle => "button_middle",
+                                }))
                                 .show_ui(ui, |ui| {
-                                    for value in
-                                        [MouseButton::Left, MouseButton::Right, MouseButton::Middle]
-                                    {
-                                        if ui
-                                            .selectable_value(button, value, format!("{:?}", value))
-                                            .changed()
-                                        {
+                                    for (value, key) in [
+                                        (MouseButton::Left, "button_left"),
+                                        (MouseButton::Right, "button_right"),
+                                        (MouseButton::Middle, "button_middle"),
+                                    ] {
+                                        if ui.selectable_value(button, value, tr(key)).changed() {
                                             changed = true;
                                         }
                                     }
                                 });
+                            ui.label(tr("click_type"));
                             egui::ComboBox::from_id_source(("studio-click", id.as_str()))
-                                .selected_text(format!("{:?}", click_type))
+                                .selected_text(tr(match click_type {
+                                    ClickType::Single => "single",
+                                    ClickType::Double => "double",
+                                    ClickType::Hold => "hold",
+                                }))
                                 .show_ui(ui, |ui| {
-                                    for value in
-                                        [ClickType::Single, ClickType::Double, ClickType::Hold]
-                                    {
-                                        if ui
-                                            .selectable_value(
-                                                click_type,
-                                                value,
-                                                format!("{:?}", value),
-                                            )
-                                            .changed()
+                                    for (value, key) in [
+                                        (ClickType::Single, "single"),
+                                        (ClickType::Double, "double"),
+                                        (ClickType::Hold, "hold"),
+                                    ] {
+                                        if ui.selectable_value(click_type, value, tr(key)).changed()
                                         {
                                             changed = true;
                                         }
@@ -1137,6 +1498,20 @@ impl FlowStudio {
                                         .suffix(" ms"),
                                 )
                                 .changed();
+                            ui.label(RichText::new(tr("wait_presets")).small().weak());
+                            ui.horizontal_wrapped(|ui| {
+                                for (label, value) in [
+                                    ("250 ms", 250),
+                                    ("0.5 s", 500),
+                                    ("1 s", 1_000),
+                                    ("5 s", 5_000),
+                                ] {
+                                    if ui.small_button(label).clicked() {
+                                        *duration_ms = value;
+                                        changed = true;
+                                    }
+                                }
+                            });
                         }
                     }
                     ui.add_space(6.0);
@@ -1252,7 +1627,7 @@ impl FlowStudio {
                 .add_enabled(
                     !locked,
                     egui::Button::new(
-                        RichText::new(format!("✕  {}", tr("studio_delete_node")))
+                        RichText::new(format!("X  {}", tr("studio_delete_node")))
                             .color(Color32::from_rgb(239, 106, 116)),
                     ),
                 )
@@ -1284,7 +1659,7 @@ impl FlowStudio {
             ui.add_space(8.0);
             ui.label(
                 RichText::new(format!(
-                    "{} → {}",
+                    "{} -> {}",
                     tr("studio_connected_to"),
                     edge.to_node_id
                 ))
@@ -1304,31 +1679,28 @@ fn write_workflow_to(path: &Path, program: &FlowProgram) -> Result<(), String> {
 
 fn palette_actions(tr: &impl Fn(&str) -> String) -> Vec<(String, Action)> {
     vec![
-        (format!("●  {}", tr("add_click")), Action::default()),
+        (tr("add_click"), Action::default()),
         (
-            format!("↗  {}", tr("add_move")),
+            tr("add_move_smooth"),
             Action::MouseMoveSmooth {
                 position: [600, 400],
                 duration_ms: 350,
             },
         ),
         (
-            format!("⌨  {}", tr("add_key")),
+            tr("add_key"),
             Action::KeyPress {
                 key: "Space".into(),
                 hold_ms: 35,
             },
         ),
         (
-            format!("▤  {}", tr("add_text")),
+            tr("add_text"),
             Action::TypeText {
                 text: "Text".into(),
             },
         ),
-        (
-            format!("◷  {}", tr("add_wait")),
-            Action::Wait { duration_ms: 500 },
-        ),
+        (tr("add_wait"), Action::Wait { duration_ms: 500 }),
     ]
 }
 
@@ -1346,18 +1718,21 @@ fn sequence_position(index: usize) -> [f32; 2] {
 
 fn default_action(index: usize) -> Action {
     match index {
-        1 => Action::MouseMoveSmooth {
+        1 => Action::MouseMove {
+            position: [600, 400],
+        },
+        2 => Action::MouseMoveSmooth {
             position: [600, 400],
             duration_ms: 350,
         },
-        2 => Action::KeyPress {
+        3 => Action::KeyPress {
             key: "Space".into(),
             hold_ms: 35,
         },
-        3 => Action::TypeText {
+        4 => Action::TypeText {
             text: "Text".into(),
         },
-        4 => Action::Wait { duration_ms: 500 },
+        5 => Action::Wait { duration_ms: 500 },
         _ => Action::default(),
     }
 }
@@ -1365,20 +1740,33 @@ fn default_action(index: usize) -> Action {
 fn action_kind_index(action: &Action) -> usize {
     match action {
         Action::MouseClick { .. } => 0,
-        Action::MouseMove { .. } | Action::MouseMoveSmooth { .. } => 1,
-        Action::KeyPress { .. } => 2,
-        Action::TypeText { .. } => 3,
-        Action::Wait { .. } => 4,
+        Action::MouseMove { .. } => 1,
+        Action::MouseMoveSmooth { .. } => 2,
+        Action::KeyPress { .. } => 3,
+        Action::TypeText { .. } => 4,
+        Action::Wait { .. } => 5,
     }
 }
 
 fn action_kind_label(action: &Action, tr: &impl Fn(&str) -> String) -> String {
     match action {
         Action::MouseClick { .. } => tr("add_click"),
-        Action::MouseMove { .. } | Action::MouseMoveSmooth { .. } => tr("add_move"),
+        Action::MouseMove { .. } => tr("add_move"),
+        Action::MouseMoveSmooth { .. } => tr("add_move_smooth"),
         Action::KeyPress { .. } => tr("add_key"),
         Action::TypeText { .. } => tr("add_text"),
         Action::Wait { .. } => tr("add_wait"),
+    }
+}
+
+fn action_label(action: &Action) -> String {
+    match action {
+        Action::MouseClick { .. } => "Mouse Click".into(),
+        Action::MouseMove { .. } => "Mouse Move".into(),
+        Action::MouseMoveSmooth { .. } => "Smooth Mouse Move".into(),
+        Action::KeyPress { .. } => "Keyboard".into(),
+        Action::TypeText { .. } => "Type Text".into(),
+        Action::Wait { .. } => "Delay".into(),
     }
 }
 
@@ -1394,17 +1782,6 @@ fn comparison_label(comparison: Comparison, tr: &impl Fn(&str) -> String) -> Str
     })
 }
 
-fn action_label(action: &Action) -> String {
-    match action {
-        Action::MouseClick { .. } => "Mouse Click".into(),
-        Action::MouseMove { .. } => "Mouse Move".into(),
-        Action::MouseMoveSmooth { .. } => "Smooth Mouse Move".into(),
-        Action::KeyPress { .. } => "Keyboard".into(),
-        Action::TypeText { .. } => "Type Text".into(),
-        Action::Wait { .. } => "Delay".into(),
-    }
-}
-
 fn node_text(node: &FlowNode, tr: &impl Fn(&str) -> String) -> (String, String) {
     match &node.kind {
         FlowNodeKind::Action {
@@ -1418,26 +1795,40 @@ fn node_text(node: &FlowNode, tr: &impl Fn(&str) -> String) -> (String, String) 
                     position,
                     ..
                 } => format!(
-                    "{:?} {:?} click · {}",
-                    button,
-                    click_type,
+                    "{} · {} · {}",
+                    tr(match button {
+                        MouseButton::Left => "button_left",
+                        MouseButton::Right => "button_right",
+                        MouseButton::Middle => "button_middle",
+                    }),
+                    tr(match click_type {
+                        ClickType::Single => "single",
+                        ClickType::Double => "double",
+                        ClickType::Hold => "hold",
+                    }),
                     position
                         .map(|p| format!("{}, {}", p[0], p[1]))
-                        .unwrap_or_else(|| "current cursor".into())
+                        .unwrap_or_else(|| tr("cursor"))
                 ),
                 Action::MouseMove { position } => {
-                    format!("Move to {}, {}", position[0], position[1])
+                    format!("{} · {}, {}", tr("add_move"), position[0], position[1])
                 }
                 Action::MouseMoveSmooth {
                     position,
                     duration_ms,
                 } => format!(
-                    "Glide to {}, {} · {duration_ms} ms",
-                    position[0], position[1]
+                    "{} · {}, {} · {duration_ms} ms",
+                    tr("add_move_smooth"),
+                    position[0],
+                    position[1]
                 ),
-                Action::KeyPress { key, .. } => format!("Press {key}"),
-                Action::TypeText { text } => format!("Type {}", truncate(text, 25)),
-                Action::Wait { duration_ms } => format!("Wait {duration_ms} ms"),
+                Action::KeyPress { key, .. } => format!("{} · {key}", tr("add_key")),
+                Action::TypeText { text } => {
+                    format!("{} · {}", tr("add_text"), truncate(text, 25))
+                }
+                Action::Wait { duration_ms } => {
+                    format!("{} · {duration_ms} ms", tr("add_wait"))
+                }
             };
             let detail = if *delay_after_ms > 0 {
                 format!("{detail} · +{delay_after_ms} ms")
@@ -1446,44 +1837,49 @@ fn node_text(node: &FlowNode, tr: &impl Fn(&str) -> String) -> (String, String) 
             };
             (node.label.clone(), detail)
         }
-        FlowNodeKind::SetVariable { name, .. } => {
-            (node.label.clone(), format!("Set variable · {name}"))
-        }
-        FlowNodeKind::Condition { comparison, .. } => {
-            (node.label.clone(), format!("Condition · {:?}", comparison))
-        }
-        FlowNodeKind::Repeat { iterations, .. } => {
-            (node.label.clone(), format!("Repeat {iterations} times"))
-        }
-        FlowNodeKind::LoopEnd { .. } => (node.label.clone(), "Return to repeat node".into()),
-        FlowNodeKind::End => (tr("studio_end_node"), "Workflow complete".into()),
+        FlowNodeKind::SetVariable { name, .. } => (
+            node.label.clone(),
+            format!("{} · {name}", tr("studio_set_variable")),
+        ),
+        FlowNodeKind::Condition { comparison, .. } => (
+            node.label.clone(),
+            format!(
+                "{} · {}",
+                tr("studio_condition"),
+                comparison_label(*comparison, tr)
+            ),
+        ),
+        FlowNodeKind::Repeat { iterations, .. } => (
+            node.label.clone(),
+            format!("{} · {iterations}", tr("studio_repeat")),
+        ),
+        FlowNodeKind::LoopEnd { .. } => (node.label.clone(), tr("studio_loop_reference")),
+        FlowNodeKind::End => (tr("studio_end_node"), tr("studio_terminal_node")),
     }
 }
 
-fn node_color(kind: &FlowNodeKind, accent: Color32) -> Color32 {
+fn node_color(kind: &FlowNodeKind, palette: &ThemeColors) -> Color32 {
     match kind {
         FlowNodeKind::Action {
             action: Action::MouseClick { .. },
             ..
-        } => accent,
+        } => palette.accent,
         FlowNodeKind::Action {
             action: Action::MouseMove { .. } | Action::MouseMoveSmooth { .. },
             ..
-        } => Color32::from_rgb(52, 196, 217),
+        } => palette.move_node,
         FlowNodeKind::Action {
             action: Action::KeyPress { .. } | Action::TypeText { .. },
             ..
-        } => Color32::from_rgb(70, 203, 145),
+        } => palette.keyboard_node,
         FlowNodeKind::Action {
             action: Action::Wait { .. },
             ..
-        } => Color32::from_rgb(239, 177, 74),
-        FlowNodeKind::Condition { .. } => Color32::from_rgb(173, 119, 240),
-        FlowNodeKind::Repeat { .. } | FlowNodeKind::LoopEnd { .. } => {
-            Color32::from_rgb(240, 128, 82)
-        }
-        FlowNodeKind::SetVariable { .. } => Color32::from_rgb(76, 160, 226),
-        FlowNodeKind::End => Color32::from_rgb(124, 145, 170),
+        } => palette.wait_node,
+        FlowNodeKind::Condition { .. } => palette.condition_node,
+        FlowNodeKind::Repeat { .. } | FlowNodeKind::LoopEnd { .. } => palette.loop_node,
+        FlowNodeKind::SetVariable { .. } => palette.variable_node,
+        FlowNodeKind::End => palette.end_node,
     }
 }
 
@@ -1515,31 +1911,504 @@ fn output_position(node: &FlowNode, port: FlowPort, canvas_origin: Pos2) -> Pos2
     canvas_origin + Vec2::new(x, y)
 }
 
-fn paint_connection(painter: &egui::Painter, from: Pos2, to: Pos2, color: Color32, width: f32) {
+fn palette_button(
+    ui: &mut egui::Ui,
+    label: &str,
+    shortcut: usize,
+    color: Color32,
+    enabled: bool,
+) -> bool {
+    let text = format!("{label}   {shortcut}");
+    ui.add_enabled(
+        enabled,
+        egui::Button::new(RichText::new(text).size(12.0))
+            .fill(with_alpha(color, 0.12))
+            .stroke(Stroke::new(1.0_f32, with_alpha(color, 0.5)))
+            .min_size(Vec2::new(ui.available_width(), 36.0)),
+    )
+    .clicked()
+}
+
+fn with_alpha(color: Color32, alpha: f32) -> Color32 {
+    Color32::from_rgba_unmultiplied(
+        color.r(),
+        color.g(),
+        color.b(),
+        (255.0 * alpha.clamp(0.0, 1.0)) as u8,
+    )
+}
+
+fn node_glyph(kind: &FlowNodeKind) -> &'static str {
+    match kind {
+        FlowNodeKind::Action {
+            action: Action::MouseClick { .. },
+            ..
+        } => "C",
+        FlowNodeKind::Action {
+            action: Action::MouseMove { .. } | Action::MouseMoveSmooth { .. },
+            ..
+        } => "M",
+        FlowNodeKind::Action {
+            action: Action::KeyPress { .. } | Action::TypeText { .. },
+            ..
+        } => "K",
+        FlowNodeKind::Action {
+            action: Action::Wait { .. },
+            ..
+        } => "W",
+        FlowNodeKind::Condition { .. } => "?",
+        FlowNodeKind::Repeat { .. } => "R",
+        FlowNodeKind::LoopEnd { .. } => "B",
+        FlowNodeKind::SetVariable { .. } => "V",
+        FlowNodeKind::End => "E",
+    }
+}
+
+fn port_label(port: FlowPort, tr: &impl Fn(&str) -> String) -> String {
+    tr(match port {
+        FlowPort::Next => "port_next",
+        FlowPort::True => "port_true",
+        FlowPort::False => "port_false",
+        FlowPort::Body => "port_body",
+        FlowPort::Done => "port_done",
+    })
+}
+
+fn paint_canvas_background(
+    painter: &egui::Painter,
+    canvas: egui::Rect,
+    clip: egui::Rect,
+    appearance: StudioAppearance,
+    animation_time: f32,
+) {
+    let palette = appearance.colors;
+    let intensity = appearance.background_intensity;
+    if intensity <= 0.0 {
+        return;
+    }
+    let grid = with_alpha(palette.grid, intensity * 0.58);
+    let accent = with_alpha(palette.accent, intensity * 0.42);
+    match appearance.background {
+        CanvasBackground::Solid => {
+            let pulse = 0.5 + (animation_time * 0.4).sin() * 0.5;
+            let radius = canvas.width().max(canvas.height()) * 0.35;
+            let first = canvas.left_top()
+                + Vec2::new(
+                    canvas.width() * (0.28 + (animation_time * 0.16).sin() * 0.04),
+                    canvas.height() * 0.3,
+                );
+            let second = canvas.left_top()
+                + Vec2::new(
+                    canvas.width() * 0.72,
+                    canvas.height() * (0.7 + (animation_time * 0.13).cos() * 0.04),
+                );
+            painter.circle_filled(
+                first,
+                radius,
+                with_alpha(palette.accent, intensity * (0.025 + pulse * 0.025)),
+            );
+            painter.circle_filled(
+                second,
+                radius * 0.82,
+                with_alpha(
+                    palette.move_node,
+                    intensity * (0.02 + (1.0 - pulse) * 0.025),
+                ),
+            );
+        }
+        CanvasBackground::Dots => {
+            let step = 24.0;
+            let phase = (animation_time * 2.0).rem_euclid(step);
+            let start_x = ((clip.left() - canvas.left() - phase) / step).floor() as i32 - 1;
+            let end_x = ((clip.right() - canvas.left() - phase) / step).ceil() as i32 + 1;
+            let start_y = ((clip.top() - canvas.top() - phase) / step).floor() as i32 - 1;
+            let end_y = ((clip.bottom() - canvas.top() - phase) / step).ceil() as i32 + 1;
+            for x in start_x..=end_x {
+                for y in start_y..=end_y {
+                    painter.circle_filled(
+                        canvas.min + Vec2::new(x as f32 * step + phase, y as f32 * step + phase),
+                        1.0,
+                        grid,
+                    );
+                }
+            }
+        }
+        CanvasBackground::Grid | CanvasBackground::Blueprint => {
+            let step = if appearance.background == CanvasBackground::Blueprint {
+                24.0
+            } else {
+                32.0
+            };
+            let phase = (animation_time * 1.5).rem_euclid(step);
+            let mut x = canvas.left()
+                + ((clip.left() - canvas.left() - phase) / step).floor() * step
+                + phase;
+            while x <= clip.right() {
+                let major = appearance.background == CanvasBackground::Blueprint
+                    && ((x - canvas.left() - phase) / step).round() as i32 % 4 == 0;
+                painter.line_segment(
+                    [Pos2::new(x, clip.top()), Pos2::new(x, clip.bottom())],
+                    Stroke::new(
+                        if major { 1.1 } else { 0.65_f32 },
+                        if major { accent } else { grid },
+                    ),
+                );
+                x += step;
+            }
+            let mut y =
+                canvas.top() + ((clip.top() - canvas.top() - phase) / step).floor() * step + phase;
+            while y <= clip.bottom() {
+                let major = appearance.background == CanvasBackground::Blueprint
+                    && ((y - canvas.top() - phase) / step).round() as i32 % 4 == 0;
+                painter.line_segment(
+                    [Pos2::new(clip.left(), y), Pos2::new(clip.right(), y)],
+                    Stroke::new(
+                        if major { 1.1 } else { 0.65_f32 },
+                        if major { accent } else { grid },
+                    ),
+                );
+                y += step;
+            }
+        }
+        CanvasBackground::Scanlines => {
+            let phase = (animation_time * 3.0).rem_euclid(4.0);
+            let mut y =
+                canvas.top() + ((clip.top() - canvas.top() - phase) / 4.0).floor() * 4.0 + phase;
+            while y <= clip.bottom() {
+                painter.line_segment(
+                    [Pos2::new(clip.left(), y), Pos2::new(clip.right(), y)],
+                    Stroke::new(1.0_f32, with_alpha(palette.accent, intensity * 0.16)),
+                );
+                y += 4.0;
+            }
+        }
+        CanvasBackground::Hex => {
+            let radius = 13.0;
+            let step_x = radius * 2.0;
+            let step_y = radius * 1.75;
+            let phase_x = (animation_time * 1.2).rem_euclid(step_x);
+            let phase_y = animation_time.rem_euclid(step_y);
+            let start_x = ((clip.left() - canvas.left() - phase_x) / step_x).floor() as i32 - 1;
+            let end_x = ((clip.right() - canvas.left() - phase_x) / step_x).ceil() as i32 + 1;
+            let start_y = ((clip.top() - canvas.top() - phase_y) / step_y).floor() as i32 - 1;
+            let end_y = ((clip.bottom() - canvas.top() - phase_y) / step_y).ceil() as i32 + 1;
+            for row in start_y..=end_y {
+                for column in start_x..=end_x {
+                    let center = canvas.min
+                        + Vec2::new(
+                            column as f32 * step_x
+                                + if row.rem_euclid(2) == 0 { 0.0 } else { radius }
+                                + phase_x,
+                            row as f32 * step_y + phase_y,
+                        );
+                    let points: Vec<Pos2> = (0..=6)
+                        .map(|index| {
+                            let angle = std::f32::consts::PI / 3.0 * index as f32;
+                            center + Vec2::new(radius * angle.cos(), radius * angle.sin())
+                        })
+                        .collect();
+                    painter.add(egui::Shape::line(points, Stroke::new(0.7_f32, grid)));
+                }
+            }
+        }
+        CanvasBackground::Circuit => {
+            let step = 64.0;
+            let phase = (animation_time * 1.3).rem_euclid(step);
+            let start_x = ((clip.left() - canvas.left() - phase) / step).floor() as i32 - 1;
+            let end_x = ((clip.right() - canvas.left() - phase) / step).ceil() as i32 + 1;
+            let start_y = ((clip.top() - canvas.top() - phase) / step).floor() as i32 - 1;
+            let end_y = ((clip.bottom() - canvas.top() - phase) / step).ceil() as i32 + 1;
+            for column in start_x..=end_x {
+                for row in start_y..=end_y {
+                    let origin = canvas.min
+                        + Vec2::new(column as f32 * step + phase, row as f32 * step + phase);
+                    let elbow = origin + Vec2::new(32.0, 32.0);
+                    let end = origin + Vec2::new(62.0, 32.0);
+                    painter.line_segment([origin, elbow], Stroke::new(0.8_f32, grid));
+                    painter.line_segment([elbow, end], Stroke::new(0.8_f32, grid));
+                    painter.circle_filled(elbow, 2.0, accent);
+                }
+            }
+        }
+        CanvasBackground::Aurora => {
+            let radius = canvas.width().max(canvas.height()) * 0.35;
+            let drift = animation_time * 0.22;
+            painter.circle_filled(
+                canvas.left_top()
+                    + Vec2::new(
+                        canvas.width() * (0.24 + drift.sin() * 0.04),
+                        canvas.height() * (0.35 + (drift * 0.7).cos() * 0.04),
+                    ),
+                radius,
+                with_alpha(palette.condition_node, intensity * 0.08),
+            );
+            painter.circle_filled(
+                canvas.left_top()
+                    + Vec2::new(
+                        canvas.width() * (0.72 + (drift * 0.8).cos() * 0.04),
+                        canvas.height() * (0.68 + (drift * 0.6).sin() * 0.04),
+                    ),
+                radius * 0.82,
+                with_alpha(palette.move_node, intensity * 0.07),
+            );
+        }
+        CanvasBackground::Horizon => {
+            let center = canvas.left_top() + Vec2::new(canvas.width() * 0.5, 220.0);
+            painter.circle_filled(center, 92.0, with_alpha(palette.warning, intensity * 0.12));
+            let horizon_y = canvas.top() + 330.0;
+            let phase = (animation_time * 15.0).rem_euclid(24.0);
+            for index in 0..12 {
+                let y = horizon_y + index as f32 * 24.0 + phase;
+                if y >= clip.top() && y <= clip.bottom() {
+                    painter.line_segment(
+                        [Pos2::new(clip.left(), y), Pos2::new(clip.right(), y)],
+                        Stroke::new(0.8_f32, grid),
+                    );
+                }
+            }
+            for index in -16..=16 {
+                let bottom_x = canvas.center().x + index as f32 * 34.0;
+                painter.line_segment(
+                    [
+                        Pos2::new(canvas.center().x, horizon_y),
+                        Pos2::new(bottom_x, canvas.bottom()),
+                    ],
+                    Stroke::new(0.8_f32, grid),
+                );
+            }
+        }
+        CanvasBackground::Stars => {
+            let step = 120.0;
+            let start_x = ((clip.left() - canvas.left()) / step).floor() as i32;
+            let end_x = ((clip.right() - canvas.left()) / step).ceil() as i32;
+            let start_y = ((clip.top() - canvas.top()) / step).floor() as i32 - 1;
+            let end_y = ((clip.bottom() - canvas.top()) / step).ceil() as i32 + 1;
+            let drift = (animation_time * 10.0).rem_euclid(canvas.height() + step);
+            for column in start_x..=end_x {
+                for row in start_y..=end_y {
+                    let seed = (column * 37 + row * 61).rem_euclid(97) as f32;
+                    let y = (row as f32 * step + 20.0 + (seed * 1.7).rem_euclid(83.0) - drift)
+                        .rem_euclid(canvas.height() + step);
+                    let point = canvas.min + Vec2::new(column as f32 * step + 12.0 + seed, y);
+                    painter.circle_filled(
+                        point,
+                        1.1 + (seed % 2.0),
+                        with_alpha(palette.text, intensity * 0.72),
+                    );
+                }
+            }
+        }
+        CanvasBackground::Matrix => {
+            let step_x = 22.0;
+            let step_y = 18.0;
+            let stream_height = canvas.height() + step_y * 9.0;
+            let start_column = ((clip.left() - canvas.left()) / step_x).floor() as i32 - 1;
+            let end_column = ((clip.right() - canvas.left()) / step_x).ceil() as i32 + 1;
+            let frame = (animation_time * 3.0) as i32;
+            for column in start_column..=end_column {
+                let seed = (column * 37).rem_euclid(97) as f32;
+                let head =
+                    (animation_time * 38.0 + seed / 97.0 * stream_height).rem_euclid(stream_height);
+                for row in 0..8 {
+                    let y = canvas.top() + (head - row as f32 * step_y).rem_euclid(stream_height);
+                    let bit = (column * 31 + row * 17 + frame).rem_euclid(2);
+                    let strength = intensity * (0.58 - row as f32 * 0.045).max(0.18);
+                    painter.text(
+                        Pos2::new(canvas.left() + column as f32 * step_x, y),
+                        Align2::CENTER_CENTER,
+                        if bit == 0 { "0" } else { "1" },
+                        FontId::monospace(11.0),
+                        with_alpha(palette.success, strength),
+                    );
+                }
+            }
+        }
+        CanvasBackground::Hearts => {
+            let step = 124.0;
+            let start_column = ((clip.left() - canvas.left()) / step).floor() as i32 - 1;
+            let end_column = ((clip.right() - canvas.left()) / step).ceil() as i32 + 1;
+            let start_row = ((clip.top() - canvas.top()) / step).floor() as i32 - 1;
+            let end_row = ((clip.bottom() - canvas.top()) / step).ceil() as i32 + 1;
+            let drift = (animation_time * 12.0).rem_euclid(canvas.height() + step);
+            for column in start_column..=end_column {
+                for row in start_row..=end_row {
+                    let seed = (column * 37 + row * 61).rem_euclid(97) as f32;
+                    let x = canvas.left() + column as f32 * step + 24.0 + seed;
+                    let y = canvas.top()
+                        + (row as f32 * step + 24.0 + (seed * 1.7).rem_euclid(68.0) - drift)
+                            .rem_euclid(canvas.height() + step);
+                    let color = match (column + row).rem_euclid(3) {
+                        0 => palette.accent,
+                        1 => palette.condition_node,
+                        _ => palette.move_node,
+                    };
+                    let heart_color = with_alpha(color, intensity * 0.3);
+                    let radius = 5.0 + seed.rem_euclid(4.0);
+                    paint_heart(painter, Pos2::new(x, y), radius, heart_color);
+                    let sparkle = Pos2::new(x + 28.0, y - 14.0);
+                    let sparkle_color = with_alpha(palette.warning, intensity * 0.5);
+                    painter.line_segment(
+                        [sparkle - Vec2::new(3.5, 0.0), sparkle + Vec2::new(3.5, 0.0)],
+                        Stroke::new(1.0_f32, sparkle_color),
+                    );
+                    painter.line_segment(
+                        [sparkle - Vec2::new(0.0, 3.5), sparkle + Vec2::new(0.0, 3.5)],
+                        Stroke::new(1.0_f32, sparkle_color),
+                    );
+                }
+            }
+        }
+        CanvasBackground::Radar => {
+            let center = canvas.center();
+            for index in 1..=8 {
+                painter.circle_stroke(center, index as f32 * 48.0, Stroke::new(0.7_f32, grid));
+            }
+            painter.line_segment(
+                [
+                    Pos2::new(clip.left(), center.y),
+                    Pos2::new(clip.right(), center.y),
+                ],
+                Stroke::new(0.8_f32, grid),
+            );
+            painter.line_segment(
+                [
+                    Pos2::new(center.x, clip.top()),
+                    Pos2::new(center.x, clip.bottom()),
+                ],
+                Stroke::new(0.8_f32, grid),
+            );
+            let angle = (animation_time * 0.65).rem_euclid(std::f32::consts::TAU);
+            let radius = canvas.width().max(canvas.height()) * 0.55;
+            painter.line_segment(
+                [
+                    center,
+                    center + Vec2::new(angle.cos() * radius, angle.sin() * radius),
+                ],
+                Stroke::new(1.4_f32, with_alpha(palette.success, intensity * 0.68)),
+            );
+        }
+    }
+}
+
+fn paint_heart(painter: &egui::Painter, center: Pos2, radius: f32, color: Color32) {
+    painter.circle_filled(
+        center + Vec2::new(-radius * 0.48, -radius * 0.2),
+        radius * 0.58,
+        color,
+    );
+    painter.circle_filled(
+        center + Vec2::new(radius * 0.48, -radius * 0.2),
+        radius * 0.58,
+        color,
+    );
+    painter.add(egui::Shape::convex_polygon(
+        vec![
+            center + Vec2::new(-radius, -radius * 0.05),
+            center + Vec2::new(radius, -radius * 0.05),
+            center + Vec2::new(0.0, radius * 1.25),
+        ],
+        color,
+        Stroke::NONE,
+    ));
+}
+
+fn drag_position(
+    start: [f32; 2],
+    pointer_start: Pos2,
+    pointer_current: Pos2,
+    snap_to_grid: bool,
+) -> [f32; 2] {
+    let delta = pointer_current - pointer_start;
+    let max_x = CANVAS_LIMIT - NODE_SIZE.x;
+    let max_y = CANVAS_LIMIT - NODE_SIZE.y;
+    let mut x = (start[0] + delta.x).clamp(16.0, max_x);
+    let mut y = (start[1] + delta.y).clamp(16.0, max_y);
+    if snap_to_grid {
+        x = ((x / 24.0).round() * 24.0).clamp(16.0, max_x);
+        y = ((y / 24.0).round() * 24.0).clamp(16.0, max_y);
+    }
+    [x, y]
+}
+
+fn bezier_point(from: Pos2, to: Pos2, t: f32) -> Pos2 {
     let bend = ((to.x - from.x).abs() * 0.5).max(42.0);
     let c1 = from + Vec2::new(bend, 0.0);
     let c2 = to - Vec2::new(bend, 0.0);
-    let points: Vec<Pos2> = (0..=16)
-        .map(|step| {
-            let t = step as f32 / 16.0;
-            let inv = 1.0 - t;
-            let point = from.to_vec2() * (inv * inv * inv)
-                + c1.to_vec2() * (3.0 * inv * inv * t)
-                + c2.to_vec2() * (3.0 * inv * t * t)
-                + to.to_vec2() * (t * t * t);
-            Pos2::new(point.x, point.y)
-        })
+    let t = t.clamp(0.0, 1.0);
+    let inv = 1.0 - t;
+    let point = from.to_vec2() * (inv * inv * inv)
+        + c1.to_vec2() * (3.0 * inv * inv * t)
+        + c2.to_vec2() * (3.0 * inv * t * t)
+        + to.to_vec2() * (t * t * t);
+    Pos2::new(point.x, point.y)
+}
+
+fn paint_connection(
+    painter: &egui::Painter,
+    from: Pos2,
+    to: Pos2,
+    color: Color32,
+    width: f32,
+    glow_strength: f32,
+) {
+    let bend = ((to.x - from.x).abs() * 0.5).max(42.0);
+    let control_end = to - Vec2::new(bend, 0.0);
+    let points: Vec<Pos2> = (0..=24)
+        .map(|step| bezier_point(from, to, step as f32 / 24.0))
         .collect();
     painter.add(egui::Shape::line(
         points.clone(),
-        Stroke::new(width + 3.0, color.linear_multiply(0.10)),
+        Stroke::new(width + 4.0, with_alpha(color, glow_strength * 0.18)),
     ));
     painter.add(egui::Shape::line(points, Stroke::new(width, color)));
-    let direction = (to - c2).normalized();
+    let direction = Vec2::new(to.x - control_end.x, to.y - control_end.y);
+    let direction = direction / direction.length().max(f32::EPSILON);
     let base = to - direction * 10.0;
     let side = Vec2::new(-direction.y, direction.x) * 4.5;
     painter.line_segment([to, base + side], Stroke::new(width, color));
     painter.line_segment([to, base - side], Stroke::new(width, color));
+}
+
+fn nearest_edge(
+    program: &FlowProgram,
+    canvas_origin: Pos2,
+    pointer: Pos2,
+) -> Option<(String, FlowPort, f32)> {
+    program
+        .edges
+        .iter()
+        .filter_map(|edge| {
+            let source = program
+                .nodes
+                .iter()
+                .find(|node| node.id == edge.from_node_id)?;
+            let target = program
+                .nodes
+                .iter()
+                .find(|node| node.id == edge.to_node_id)?;
+            let from = output_position(source, edge.port, canvas_origin);
+            let to = input_position(target, canvas_origin);
+            let mut previous = from;
+            let mut distance = f32::MAX;
+            for step in 1..=24 {
+                let current = bezier_point(from, to, step as f32 / 24.0);
+                distance = distance.min(distance_to_segment(pointer, previous, current));
+                previous = current;
+            }
+            Some((edge.from_node_id.clone(), edge.port, distance))
+        })
+        .filter(|(_, _, distance)| *distance <= 12.0)
+        .min_by(|left, right| left.2.total_cmp(&right.2))
+}
+
+fn distance_to_segment(point: Pos2, start: Pos2, end: Pos2) -> f32 {
+    let segment = end - start;
+    let length_squared = segment.length_sq();
+    if length_squared <= f32::EPSILON {
+        return point.distance(start);
+    }
+    let projection = ((point - start).dot(segment) / length_squared).clamp(0.0, 1.0);
+    point.distance(start + segment * projection)
 }
 
 fn edit_operand(
@@ -1691,6 +2560,67 @@ mod tests {
     }
 
     #[test]
+    fn background_animation_clock_pauses_and_resumes_without_a_time_jump() {
+        let mut studio = FlowStudio::from_sequence(&[SequenceStep::default()]);
+        studio.advance_animation_clock(1.0, true);
+        studio.advance_animation_clock(1.08, true);
+        let before_pause = studio.animation_time;
+
+        studio.advance_animation_clock(10.0, false);
+        studio.advance_animation_clock(20.0, false);
+        assert_eq!(studio.animation_time, before_pause);
+
+        studio.advance_animation_clock(20.04, true);
+        assert!((studio.animation_time - before_pause - 0.04).abs() < 0.001);
+    }
+
+    #[test]
+    fn loaded_example_is_valid_and_uses_only_safe_pointer_moves_and_waits() {
+        let translate = |key: &str| key.to_owned();
+        let mut studio = FlowStudio::from_sequence(&[]);
+        studio.load_example(&translate);
+
+        assert!(studio.program.validate().is_ok());
+        assert_eq!(studio.program.nodes.len(), 4);
+        assert_eq!(studio.program.edges.len(), 3);
+        assert_eq!(
+            studio.program.nodes.last().unwrap().label,
+            "studio_end_node"
+        );
+        assert!(studio.program.nodes.iter().all(|node| match &node.kind {
+            FlowNodeKind::Action { action, .. } =>
+                matches!(action, Action::MouseMoveSmooth { .. } | Action::Wait { .. }),
+            FlowNodeKind::End => true,
+            _ => false,
+        }));
+    }
+
+    #[test]
+    fn slow_pointer_deltas_accumulate_before_grid_snapping() {
+        let pointer_start = Pos2::new(100.0, 100.0);
+        let start = [48.0, 48.0];
+        let mut snapped = start;
+        for step in 1..=48 {
+            let offset = step as f32 * 0.5;
+            snapped = drag_position(
+                start,
+                pointer_start,
+                pointer_start + Vec2::splat(offset),
+                true,
+            );
+        }
+        assert_eq!(snapped, [72.0, 72.0]);
+
+        let unsnapped = drag_position(
+            start,
+            pointer_start,
+            pointer_start + Vec2::splat(0.5),
+            false,
+        );
+        assert_eq!(unsnapped, [48.5, 48.5]);
+    }
+
+    #[test]
     fn action_insertions_extend_the_visual_end_of_a_linear_flow() {
         let mut studio = FlowStudio::from_sequence(&[SequenceStep::default()]);
         studio.add_action(Action::Wait { duration_ms: 250 });
@@ -1813,5 +2743,71 @@ mod tests {
         assert!(studio.program.edges.is_empty());
         assert!(studio.selected_node_id.is_none());
         assert!(studio.program.validate().is_ok());
+    }
+
+    #[test]
+    fn deleting_a_selected_connection_keeps_its_nodes_intact() {
+        let mut studio = FlowStudio::from_sequence(&[SequenceStep::default()]);
+        let edge = &studio.program.edges[0];
+        studio.selected_edge = Some((edge.from_node_id.clone(), edge.port));
+        let node_count = studio.program.nodes.len();
+
+        assert!(studio.delete_selected_edge());
+        assert!(studio.program.edges.is_empty());
+        assert_eq!(studio.program.nodes.len(), node_count);
+        assert!(studio.selected_edge.is_none());
+    }
+
+    #[test]
+    fn edge_hit_testing_uses_the_same_bezier_curve_as_canvas_rendering() {
+        let studio = FlowStudio::from_sequence(&[SequenceStep::default()]);
+        let origin = Pos2::new(40.0, 35.0);
+        let edge = &studio.program.edges[0];
+        let source = studio
+            .program
+            .nodes
+            .iter()
+            .find(|node| node.id == edge.from_node_id)
+            .unwrap();
+        let target = studio
+            .program
+            .nodes
+            .iter()
+            .find(|node| node.id == edge.to_node_id)
+            .unwrap();
+        let from = output_position(source, edge.port, origin);
+        let to = input_position(target, origin);
+        let midpoint = bezier_point(from, to, 0.5);
+
+        let hit = nearest_edge(&studio.program, origin, midpoint).unwrap();
+        assert_eq!(hit.0, edge.from_node_id);
+        assert_eq!(hit.1, edge.port);
+        assert!(hit.2 <= 1.0);
+        assert!(nearest_edge(&studio.program, origin, Pos2::new(9_000.0, 9_000.0)).is_none());
+    }
+
+    #[test]
+    fn instant_and_smooth_mouse_moves_remain_distinct_in_the_inspector() {
+        assert_eq!(
+            action_kind_index(&default_action(1)),
+            1,
+            "index 1 is the immediate pointer move"
+        );
+        assert!(matches!(default_action(1), Action::MouseMove { .. }));
+        assert!(matches!(default_action(2), Action::MouseMoveSmooth { .. }));
+        assert_eq!(action_kind_index(&default_action(2)), 2);
+    }
+
+    #[test]
+    fn numbered_palette_entries_match_their_inserted_actions() {
+        let translate = |key: &str| key.to_owned();
+        let palette = palette_actions(&translate);
+        assert_eq!(palette.len(), 5);
+        assert!(matches!(&palette[0].1, Action::MouseClick { .. }));
+        assert!(matches!(&palette[1].1, Action::MouseMoveSmooth { .. }));
+        assert_eq!(palette[1].0, "add_move_smooth");
+        assert!(matches!(&palette[2].1, Action::KeyPress { .. }));
+        assert!(matches!(&palette[3].1, Action::TypeText { .. }));
+        assert!(matches!(&palette[4].1, Action::Wait { .. }));
     }
 }
