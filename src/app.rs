@@ -210,15 +210,6 @@ impl ClickerApp {
         let catalog = self.catalog.clone();
         let locale = self.settings.locale.clone();
         let tr = |key: &str| catalog.text(&locale, key);
-        ui.horizontal(|ui| {
-            ui.label(RichText::new(tr("studio_mode_note")).weak());
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button(tr("studio_classic")).clicked() {
-                    self.studio_mode = false;
-                }
-            });
-        });
-        ui.label(RichText::new(tr("studio_separate_classic")).small().weak());
         let appearance = theme::studio_appearance(
             &self.settings.theme,
             &self.settings.accent_hex,
@@ -230,12 +221,14 @@ impl ClickerApp {
             self.settings.background_animations,
             self.settings.crt_overlay,
         );
+        let flow_events = self.state.flow_events();
         let (command, changed) = self.studio.draw(
             ui,
             &tr,
             appearance,
             self.state.is_running(),
             self.state.completed_cycles(),
+            &flow_events,
             &mut self.settings.interval_ms,
             &mut self.settings.repeat_count,
         );
@@ -1390,18 +1383,84 @@ impl eframe::App for ClickerApp {
         }
         theme::apply(ctx, &self.settings.theme, &self.settings.accent_hex);
         let palette = theme::colors_for(&self.settings.theme, &self.settings.accent_hex);
+        let studio_workspace = self.page == Page::Automation && self.studio_mode;
         egui::TopBottomPanel::top("header")
             .frame(
                 egui::Frame::none()
                     .fill(palette.panel)
                     .stroke(Stroke::new(1.0_f32, palette.border))
-                    .inner_margin(egui::Margin::symmetric(14.0, 8.0)),
+                    .inner_margin(egui::Margin::symmetric(14.0, 7.0)),
             )
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new("▶").color(palette.accent).size(21.0));
-                    ui.heading(RichText::new(self.tr("app_title")).strong());
+                    let (logo, _) = ui.allocate_exact_size(Vec2::splat(34.0), egui::Sense::hover());
+                    ui.painter().rect_filled(logo, 8.0, palette.accent);
+                    ui.painter().text(
+                        logo.center(),
+                        Align2::CENTER_CENTER,
+                        "KC",
+                        FontId::proportional(13.0),
+                        Color32::WHITE,
+                    );
+                    ui.vertical(|ui| {
+                        ui.label(RichText::new(self.tr("app_title")).strong().size(15.0));
+                        ui.label(
+                            RichText::new(self.tr("studio_title"))
+                                .small()
+                                .color(palette.muted),
+                        );
+                    });
+                    ui.add_space(10.0);
+                    ui.separator();
+                    for (key, page, mode) in [
+                        ("nav_studio", Page::Automation, Some(true)),
+                        ("nav_classic", Page::Automation, Some(false)),
+                        ("nav_appearance", Page::Appearance, None),
+                        ("nav_about", Page::About, None),
+                    ] {
+                        let selected = self.page == page
+                            && mode.is_none_or(|is_studio| self.studio_mode == is_studio);
+                        let fill = if selected {
+                            Color32::from_rgba_unmultiplied(
+                                palette.accent.r(),
+                                palette.accent.g(),
+                                palette.accent.b(),
+                                if palette.is_light { 30 } else { 42 },
+                            )
+                        } else {
+                            palette.panel
+                        };
+                        let stroke = if selected {
+                            palette.accent
+                        } else {
+                            palette.panel
+                        };
+                        if ui
+                            .add_sized(
+                                Vec2::new(88.0, 34.0),
+                                egui::Button::new(RichText::new(self.tr(key)).size(12.0))
+                                    .fill(fill)
+                                    .stroke(Stroke::new(1.0_f32, stroke)),
+                            )
+                            .clicked()
+                        {
+                            self.page = page;
+                            if let Some(is_studio) = mode {
+                                self.studio_mode = is_studio;
+                            }
+                        }
+                    }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(
+                            RichText::new(format!(
+                                "{}  {}",
+                                self.tr("status_cycles"),
+                                self.state.completed_cycles()
+                            ))
+                            .small()
+                            .color(palette.muted),
+                        );
+                        ui.separator();
                         if self.state.is_running() {
                             ui.colored_label(palette.success, self.tr("status_running"));
                         } else {
@@ -1410,103 +1469,31 @@ impl eframe::App for ClickerApp {
                     });
                 });
             });
-        egui::SidePanel::left("navigation")
-            .resizable(false)
-            .default_width(174.0)
-            .frame(
-                egui::Frame::none()
-                    .fill(palette.panel)
-                    .stroke(Stroke::new(1.0_f32, palette.border))
-                    .inner_margin(egui::Margin::symmetric(10.0, 12.0)),
-            )
-            .show(ctx, |ui| {
-                ui.label(
-                    RichText::new(self.tr("nav_section"))
-                        .small()
-                        .strong()
-                        .color(palette.muted),
-                );
-                ui.add_space(10.0);
-                for (page, key, glyph) in [
-                    (Page::Automation, "nav_automation", "F"),
-                    (Page::Appearance, "nav_appearance", "T"),
-                    (Page::About, "nav_about", "i"),
-                ] {
-                    let selected = self.page == page;
-                    let response = ui.add_sized(
-                        Vec2::new(ui.available_width(), 38.0),
-                        egui::Button::new(format!("{glyph}   {}", self.tr(key)))
-                            .fill(if selected {
-                                Color32::from_rgba_unmultiplied(
-                                    palette.accent.r(),
-                                    palette.accent.g(),
-                                    palette.accent.b(),
-                                    32,
-                                )
-                            } else {
-                                palette.panel
-                            })
-                            .stroke(Stroke::new(
-                                1.0_f32,
-                                if selected {
-                                    palette.accent
-                                } else {
-                                    palette.panel
-                                },
-                            )),
-                    );
-                    if response.clicked() {
-                        self.page = page;
-                    }
-                }
-                ui.add_space(14.0);
-                ui.separator();
-                ui.label(
-                    RichText::new(self.tr("hotkeys"))
-                        .small()
-                        .strong()
-                        .color(palette.muted),
-                );
-                ui.label(
-                    RichText::new(format!(
-                        "{}  {}",
-                        self.settings.start_hotkey,
-                        self.tr("start")
-                    ))
-                    .weak(),
-                );
-                ui.label(
-                    RichText::new(format!(
-                        "{}  {}",
-                        self.settings.stop_hotkey,
-                        self.tr("stop")
-                    ))
-                    .weak(),
-                );
-            });
         egui::CentralPanel::default()
             .frame(egui::Frame::none().fill(palette.app_background))
             .show(ctx, |ui| {
-                egui::ScrollArea::vertical()
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        match self.page {
+                if studio_workspace {
+                    self.draw_automation(ui);
+                } else {
+                    egui::ScrollArea::vertical()
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| match self.page {
                             Page::Automation => self.draw_automation(ui),
                             Page::Appearance => self.draw_appearance(ui),
                             Page::About => self.draw_about(ui),
-                        }
-                        if let Some((message, is_error)) = &self.message {
-                            ui.add_space(12.0);
-                            if *is_error {
-                                ui.colored_label(
-                                    Color32::LIGHT_RED,
-                                    format!("{}: {message}", self.tr("error")),
-                                );
-                            } else {
-                                ui.weak(message);
-                            }
-                        }
-                    });
+                        });
+                }
+                if let Some((message, is_error)) = &self.message {
+                    ui.add_space(8.0);
+                    if *is_error {
+                        ui.colored_label(
+                            Color32::LIGHT_RED,
+                            format!("{}: {message}", self.tr("error")),
+                        );
+                    } else {
+                        ui.weak(message);
+                    }
+                }
             });
         if theme::parse_color(&self.settings.accent_hex).is_none() {
             self.message = Some((self.tr("invalid_accent"), true));

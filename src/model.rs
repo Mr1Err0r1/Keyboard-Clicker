@@ -135,7 +135,7 @@ impl Default for AppSettings {
         Self {
             locale: "en".into(),
             theme: "dark".into(),
-            accent_hex: "#6C8CFF".into(),
+            accent_hex: "#14B8F6".into(),
             canvas_background: default_canvas_background(),
             background_intensity: default_background_intensity(),
             glow_intensity: default_glow_intensity(),

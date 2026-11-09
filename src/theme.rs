@@ -1,4 +1,4 @@
-use eframe::egui::{Color32, Context, Rounding, Stroke, Visuals};
+use eframe::egui::{Color32, Context, Rounding, Stroke, Vec2, Visuals};
 
 pub const THEMES: &[(&str, &str, &str)] = &[
     ("dark", "theme_midnight", "#0B1220"),
@@ -325,7 +325,12 @@ pub fn apply(ctx: &Context, theme: &str, accent_hex: &str) {
     visuals.widgets.inactive.rounding = Rounding::same(rounding.min(6.0));
     visuals.widgets.hovered.rounding = Rounding::same(rounding.min(6.0));
     visuals.widgets.active.rounding = Rounding::same(rounding.min(6.0));
-    ctx.set_visuals(visuals);
+    let mut style = (*ctx.style()).clone();
+    style.visuals = visuals;
+    style.spacing.item_spacing = Vec2::new(8.0, 7.0);
+    style.spacing.button_padding = Vec2::new(10.0, 6.0);
+    style.spacing.interact_size = Vec2::new(38.0, 24.0);
+    ctx.set_style(style);
 }
 
 fn accent_linear(color: Color32, amount: f32) -> Color32 {

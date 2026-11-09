@@ -1,4 +1,5 @@
 use crate::{
+    engine::FlowRunEvent,
     flow::{
         import_autoflow_json, Comparison, FlowEdge, FlowNode, FlowNodeKind, FlowPort, FlowProgram,
         FlowRunOptions, FlowValue, Operand, VariableOperation, FLOW_SCHEMA_VERSION, MAX_FLOW_EDGES,
@@ -10,7 +11,9 @@ use crate::{
 use eframe::egui::{self, Align2, Color32, FontId, Pos2, RichText, Stroke, Vec2};
 use std::{collections::HashSet, path::Path};
 
-const NODE_SIZE: Vec2 = Vec2::new(220.0, 106.0);
+const NODE_SIZE: Vec2 = Vec2::new(200.0, 88.0);
+const NODE_GAP_X: f32 = 60.0;
+const NODE_GAP_Y: f32 = 56.0;
 const CANVAS_LIMIT: f32 = 20_000.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -229,6 +232,7 @@ impl FlowStudio {
         appearance: StudioAppearance,
         locked: bool,
         completed_cycles: u64,
+        flow_events: &[FlowRunEvent],
         interval_ms: &mut u64,
         repeat_count: &mut u64,
     ) -> (StudioCommand, bool) {
@@ -241,7 +245,7 @@ impl FlowStudio {
         let accent = appearance.colors.accent;
         egui::Frame::none()
             .fill(appearance.colors.app_background)
-            .inner_margin(egui::Margin::symmetric(18.0, 14.0))
+            .inner_margin(egui::Margin::symmetric(10.0, 8.0))
             .show(ui, |ui| {
                 ui.group(|ui| {
                     ui.horizontal(|ui| {
@@ -294,8 +298,8 @@ impl FlowStudio {
                                 .add_enabled(
                                     self.program.validate().is_ok(),
                                     egui::Button::new(
-                                        RichText::new(format!("▶  {}", tr("start")))
-                                            .color(Color32::WHITE),
+                                        RichText::new(tr("start"))
+                                            .color(contrast_text_color(accent)),
                                     )
                                     .fill(accent),
                                 )
@@ -303,10 +307,10 @@ impl FlowStudio {
                             {
                                 command = StudioCommand::Start;
                             }
-                            if ui.button(format!("↑  {}", tr("studio_export"))).clicked() {
+                            if ui.button(tr("studio_export")).clicked() {
                                 command = StudioCommand::Export;
                             }
-                            if ui.button(format!("↓  {}", tr("studio_import"))).clicked() {
+                            if ui.button(tr("studio_import")).clicked() {
                                 command = StudioCommand::Import;
                             }
                             ui.separator();
@@ -347,120 +351,135 @@ impl FlowStudio {
                 ui.separator();
                 ui.add_space(8.0);
                 let available = ui.available_size();
-                let compact = available.x < 900.0;
-                let left_width = if compact { 156.0 } else { 184.0 };
-                let right_width = if compact { 218.0 } else { 254.0 };
-                let center_width = (available.x - left_width - right_width - 28.0).max(260.0);
-                let height = available.y.max(420.0);
+                let compact = available.x < 1_100.0;
+                let left_width = if compact { 184.0 } else { 224.0 };
+                let right_width = if compact { 232.0 } else { 278.0 };
+                let center_width = (available.x - left_width - right_width - 20.0).max(280.0);
+                let height = available.y.max(280.0);
+                let active_node_id = locked
+                    .then(|| flow_events.last().map(|event| event.node_id.as_str()))
+                    .flatten();
                 ui.horizontal_top(|ui| {
                     ui.allocate_ui_with_layout(
                         Vec2::new(left_width, height),
                         egui::Layout::top_down(egui::Align::Min),
                         |ui| {
-                            ui.group(|ui| {
-                                ui.label(RichText::new(tr("studio_palette")).strong());
-                                ui.label(
-                                    RichText::new(tr("studio_actions"))
-                                        .small()
-                                        .color(accent)
-                                        .strong(),
-                                );
-                                ui.add_space(5.0);
-                                for (index, (label, action)) in
-                                    palette_actions(tr).into_iter().enumerate()
-                                {
-                                    let color = match index {
-                                        0 => appearance.colors.accent,
-                                        1 => appearance.colors.move_node,
-                                        2 | 3 => appearance.colors.keyboard_node,
-                                        _ => appearance.colors.wait_node,
-                                    };
-                                    if palette_button(
-                                        ui,
-                                        &label,
-                                        index + 1,
-                                        color,
-                                        self.program.nodes.len() < MAX_FLOW_NODES,
-                                    ) {
-                                        self.add_action(action);
-                                        changed = true;
-                                    }
-                                }
-                                ui.add_space(14.0);
-                                ui.label(
-                                    RichText::new(tr("studio_control"))
-                                        .small()
-                                        .color(accent)
-                                        .strong(),
-                                );
-                                if palette_button(
-                                    ui,
-                                    &tr("studio_condition"),
-                                    6,
-                                    appearance.colors.condition_node,
-                                    self.program.nodes.len() < MAX_FLOW_NODES,
-                                ) {
-                                    self.add_condition();
-                                    changed = true;
-                                }
-                                if palette_button(
-                                    ui,
-                                    &tr("studio_repeat"),
-                                    7,
-                                    appearance.colors.loop_node,
-                                    self.program.nodes.len() <= MAX_FLOW_NODES - 2,
-                                ) {
-                                    self.add_repeat();
-                                    changed = true;
-                                }
-                                if palette_button(
-                                    ui,
-                                    &tr("studio_set_variable"),
-                                    8,
-                                    appearance.colors.variable_node,
-                                    self.program.nodes.len() < MAX_FLOW_NODES,
-                                ) {
-                                    self.add_variable();
-                                    changed = true;
-                                }
-                                ui.add_space(8.0);
-                                ui.label(RichText::new(tr("studio_palette_help")).small().weak());
-                                if self.confirm_load_example {
-                                    ui.colored_label(
-                                        appearance.colors.warning,
-                                        tr("studio_example_replace_warning"),
-                                    );
-                                    ui.horizontal(|ui| {
-                                        if ui.button(tr("studio_example_confirm")).clicked() {
-                                            self.load_example(tr);
+                            egui::ScrollArea::vertical()
+                                .id_source("studio_palette_scroll")
+                                .auto_shrink([false, false])
+                                .show(ui, |ui| {
+                                    ui.group(|ui| {
+                                        ui.label(RichText::new(tr("studio_palette")).strong());
+                                        ui.label(
+                                            RichText::new(tr("studio_actions"))
+                                                .small()
+                                                .color(accent)
+                                                .strong(),
+                                        );
+                                        ui.add_space(5.0);
+                                        for (index, (label, action)) in
+                                            palette_actions(tr).into_iter().enumerate()
+                                        {
+                                            let color = match index {
+                                                0 => appearance.colors.accent,
+                                                1 => appearance.colors.move_node,
+                                                2 | 3 => appearance.colors.keyboard_node,
+                                                _ => appearance.colors.wait_node,
+                                            };
+                                            if palette_button(
+                                                ui,
+                                                &label,
+                                                index + 1,
+                                                color,
+                                                self.program.nodes.len() < MAX_FLOW_NODES,
+                                            ) {
+                                                self.add_action(action);
+                                                changed = true;
+                                            }
+                                        }
+                                        ui.add_space(14.0);
+                                        ui.label(
+                                            RichText::new(tr("studio_control"))
+                                                .small()
+                                                .color(accent)
+                                                .strong(),
+                                        );
+                                        if palette_button(
+                                            ui,
+                                            &tr("studio_condition"),
+                                            6,
+                                            appearance.colors.condition_node,
+                                            self.program.nodes.len() < MAX_FLOW_NODES,
+                                        ) {
+                                            self.add_condition();
                                             changed = true;
                                         }
-                                        if ui.button(tr("studio_example_cancel")).clicked() {
-                                            self.confirm_load_example = false;
+                                        if palette_button(
+                                            ui,
+                                            &tr("studio_repeat"),
+                                            7,
+                                            appearance.colors.loop_node,
+                                            self.program.nodes.len() <= MAX_FLOW_NODES - 2,
+                                        ) {
+                                            self.add_repeat();
+                                            changed = true;
                                         }
+                                        if palette_button(
+                                            ui,
+                                            &tr("studio_set_variable"),
+                                            8,
+                                            appearance.colors.variable_node,
+                                            self.program.nodes.len() < MAX_FLOW_NODES,
+                                        ) {
+                                            self.add_variable();
+                                            changed = true;
+                                        }
+                                        ui.add_space(8.0);
+                                        ui.label(
+                                            RichText::new(tr("studio_palette_help")).small().weak(),
+                                        );
+                                        if self.confirm_load_example {
+                                            ui.colored_label(
+                                                appearance.colors.warning,
+                                                tr("studio_example_replace_warning"),
+                                            );
+                                            ui.horizontal(|ui| {
+                                                if ui.button(tr("studio_example_confirm")).clicked()
+                                                {
+                                                    self.load_example(tr);
+                                                    changed = true;
+                                                }
+                                                if ui.button(tr("studio_example_cancel")).clicked()
+                                                {
+                                                    self.confirm_load_example = false;
+                                                }
+                                            });
+                                        } else if ui
+                                            .add_enabled(
+                                                !locked,
+                                                egui::Button::new(tr("studio_load_example")),
+                                            )
+                                            .on_hover_text(tr("studio_load_example_hint"))
+                                            .clicked()
+                                        {
+                                            self.confirm_load_example = true;
+                                        }
+                                        if self.connecting.is_some()
+                                            && ui.button(tr("studio_cancel_connection")).clicked()
+                                        {
+                                            self.connecting = None;
+                                        }
+                                        ui.add_space(12.0);
+                                        ui.label(
+                                            RichText::new(format!(
+                                                "0 = {}",
+                                                tr("studio_until_stopped")
+                                            ))
+                                            .small()
+                                            .weak(),
+                                        );
                                     });
-                                } else if ui
-                                    .add_enabled(
-                                        !locked,
-                                        egui::Button::new(tr("studio_load_example")),
-                                    )
-                                    .on_hover_text(tr("studio_load_example_hint"))
-                                    .clicked()
-                                {
-                                    self.confirm_load_example = true;
-                                }
-                                if self.connecting.is_some()
-                                    && ui.button(tr("studio_cancel_connection")).clicked()
-                                {
-                                    self.connecting = None;
-                                }
-                                ui.add_space(12.0);
-                                ui.label(
-                                    RichText::new(format!("0 = {}", tr("studio_until_stopped")))
-                                        .small()
-                                        .weak(),
-                                );
-                            });
+                                });
                         },
                     );
                     ui.separator();
@@ -495,7 +514,24 @@ impl FlowStudio {
                                     }
                                 }
                                 ui.add_space(6.0);
-                                changed |= self.draw_canvas(ui, tr, appearance, locked);
+                                let available_height = ui.available_height();
+                                let monitor_height = (available_height * 0.30).clamp(132.0, 176.0);
+                                let canvas_height =
+                                    (available_height - monitor_height - 44.0).max(160.0);
+                                let center_width = ui.available_width();
+                                ui.allocate_ui_with_layout(
+                                    Vec2::new(center_width, canvas_height),
+                                    egui::Layout::top_down(egui::Align::Min),
+                                    |ui| {
+                                        changed |= self.draw_canvas(
+                                            ui,
+                                            tr,
+                                            appearance,
+                                            locked,
+                                            active_node_id,
+                                        );
+                                    },
+                                );
                                 match self.program.validate() {
                                     Ok(()) => {
                                         ui.colored_label(
@@ -513,6 +549,21 @@ impl FlowStudio {
                                         );
                                     }
                                 }
+                                ui.add_space(4.0);
+                                ui.allocate_ui_with_layout(
+                                    Vec2::new(ui.available_width(), monitor_height),
+                                    egui::Layout::top_down(egui::Align::Min),
+                                    |ui| {
+                                        self.draw_run_monitor(
+                                            ui,
+                                            tr,
+                                            appearance,
+                                            locked,
+                                            completed_cycles,
+                                            flow_events,
+                                        );
+                                    },
+                                );
                             });
                         },
                     );
@@ -521,16 +572,237 @@ impl FlowStudio {
                         Vec2::new(right_width, height),
                         egui::Layout::top_down(egui::Align::Min),
                         |ui| {
-                            ui.group(|ui| {
-                                ui.label(RichText::new(tr("studio_inspector")).strong());
-                                ui.add_space(8.0);
-                                changed |= self.draw_inspector(ui, tr, appearance, locked);
-                            });
+                            egui::ScrollArea::vertical()
+                                .id_source("studio_inspector_scroll")
+                                .auto_shrink([false, false])
+                                .show(ui, |ui| {
+                                    ui.group(|ui| {
+                                        ui.label(RichText::new(tr("studio_inspector")).strong());
+                                        ui.add_space(8.0);
+                                        changed |= self.draw_inspector(ui, tr, appearance, locked);
+                                    });
+                                });
                         },
                     );
                 });
             });
         (command, changed)
+    }
+
+    fn draw_run_monitor(
+        &mut self,
+        ui: &mut egui::Ui,
+        tr: &impl Fn(&str) -> String,
+        appearance: StudioAppearance,
+        locked: bool,
+        completed_cycles: u64,
+        flow_events: &[FlowRunEvent],
+    ) {
+        let palette = appearance.colors;
+        egui::Frame::none()
+            .fill(palette.panel_alt)
+            .stroke(Stroke::new(1.0_f32, palette.border))
+            .inner_margin(egui::Margin::symmetric(10.0, 7.0))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new(tr("studio_monitor"))
+                            .strong()
+                            .color(palette.text),
+                    );
+                    let (status, color) = if locked {
+                        (tr("studio_monitor_live"), palette.success)
+                    } else if flow_events.is_empty() {
+                        (tr("studio_monitor_idle"), palette.muted)
+                    } else {
+                        (tr("status_stopped"), palette.muted)
+                    };
+                    ui.colored_label(color, status);
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(
+                            RichText::new(format!(
+                                "{}  {}  |  {}",
+                                tr("status_cycles"),
+                                completed_cycles,
+                                flow_events.len()
+                            ))
+                            .small()
+                            .color(palette.muted),
+                        );
+                    });
+                });
+                ui.add_space(5.0);
+                ui.horizontal(|ui| {
+                    self.draw_target_preview(ui, tr, appearance, locked, flow_events);
+                    ui.separator();
+                    ui.vertical(|ui| {
+                        if flow_events.is_empty() {
+                            ui.label(RichText::new(tr("studio_monitor_empty")).color(palette.text));
+                        } else {
+                            egui::ScrollArea::horizontal()
+                                .id_source("studio_run_trace")
+                                .auto_shrink([false, false])
+                                .show(ui, |ui| {
+                                    ui.horizontal(|ui| {
+                                        for (index, event) in flow_events.iter().enumerate() {
+                                            if index > 0 {
+                                                ui.weak("-->");
+                                            }
+                                            let Some(node) = self
+                                                .program
+                                                .nodes
+                                                .iter()
+                                                .find(|node| node.id == event.node_id)
+                                            else {
+                                                let label = format!(
+                                                    "{}  +{:.2}s",
+                                                    event.node_id,
+                                                    event.elapsed_ms as f32 / 1_000.0
+                                                );
+                                                ui.add_sized(
+                                                    Vec2::new(112.0, 48.0),
+                                                    egui::Button::new(RichText::new(label).small())
+                                                        .fill(palette.panel)
+                                                        .stroke(Stroke::new(
+                                                            1.0_f32,
+                                                            palette.border,
+                                                        )),
+                                                );
+                                                continue;
+                                            };
+                                            let (title, detail) = node_text(node, tr);
+                                            let color = node_color(&node.kind, &palette);
+                                            let label = format!(
+                                                "{}  +{:.2}s",
+                                                truncate(&title, 13),
+                                                event.elapsed_ms as f32 / 1_000.0
+                                            );
+                                            let is_current =
+                                                locked && index + 1 == flow_events.len();
+                                            let response = ui
+                                                .add_sized(
+                                                    Vec2::new(118.0, 48.0),
+                                                    egui::Button::new(
+                                                        RichText::new(label).small().strong(),
+                                                    )
+                                                    .fill(with_alpha(
+                                                        if is_current {
+                                                            palette.success
+                                                        } else {
+                                                            color
+                                                        },
+                                                        if is_current { 0.22 } else { 0.12 },
+                                                    ))
+                                                    .stroke(Stroke::new(
+                                                        if is_current { 1.6_f32 } else { 1.0_f32 },
+                                                        if is_current {
+                                                            palette.success
+                                                        } else {
+                                                            color
+                                                        },
+                                                    )),
+                                                )
+                                                .on_hover_text(format!("{}\n{}", title, detail));
+                                            if response.clicked() {
+                                                self.selected_node_id = Some(event.node_id.clone());
+                                                self.selected_edge = None;
+                                            }
+                                        }
+                                    });
+                                });
+                        }
+                    });
+                });
+                ui.add_space(3.0);
+                ui.label(RichText::new(tr("studio_monitor_hint")).small().weak());
+            });
+    }
+
+    fn draw_target_preview(
+        &self,
+        ui: &mut egui::Ui,
+        tr: &impl Fn(&str) -> String,
+        appearance: StudioAppearance,
+        locked: bool,
+        flow_events: &[FlowRunEvent],
+    ) {
+        let palette = appearance.colors;
+        ui.vertical(|ui| {
+            ui.set_min_width(150.0);
+            ui.label(
+                RichText::new(tr("studio_monitor_preview"))
+                    .small()
+                    .strong()
+                    .color(palette.muted),
+            );
+            let (rect, _) = ui.allocate_exact_size(Vec2::new(148.0, 64.0), egui::Sense::hover());
+            let painter = ui.painter_at(rect);
+            painter.rect_filled(rect, 5.0, palette.canvas);
+            painter.rect_stroke(rect, 5.0, Stroke::new(1.0_f32, palette.border));
+            let inner = rect.shrink(5.0);
+            for fraction in [0.25_f32, 0.5, 0.75] {
+                let x = egui::lerp(inner.left()..=inner.right(), fraction);
+                let y = egui::lerp(inner.top()..=inner.bottom(), fraction);
+                painter.line_segment(
+                    [Pos2::new(x, inner.top()), Pos2::new(x, inner.bottom())],
+                    Stroke::new(0.5_f32, with_alpha(palette.grid, 0.55)),
+                );
+                painter.line_segment(
+                    [Pos2::new(inner.left(), y), Pos2::new(inner.right(), y)],
+                    Stroke::new(0.5_f32, with_alpha(palette.grid, 0.55)),
+                );
+            }
+
+            let selected_id = if locked {
+                flow_events.last().map(|event| event.node_id.as_str())
+            } else {
+                self.selected_node_id.as_deref()
+            };
+            let target_node =
+                selected_id.and_then(|id| self.program.nodes.iter().find(|node| node.id == id));
+            let mut target = None;
+            let mut caption = tr("studio_monitor_no_target");
+            if let Some(node) = target_node {
+                if let FlowNodeKind::Action { action, .. } = &node.kind {
+                    match action {
+                        Action::MouseMove { position }
+                        | Action::MouseMoveSmooth { position, .. } => {
+                            target = Some(*position);
+                            caption = format!("X {}   Y {}", position[0], position[1]);
+                        }
+                        Action::MouseClick { position, .. } => {
+                            if let Some(position) = position {
+                                target = Some(*position);
+                                caption = format!("X {}   Y {}", position[0], position[1]);
+                            } else {
+                                target = Some([960, 540]);
+                                caption = tr("cursor");
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            if let Some([x, y]) = target {
+                let point = Pos2::new(
+                    egui::lerp(
+                        inner.left()..=inner.right(),
+                        (x as f32 / 1_920.0).clamp(0.0, 1.0),
+                    ),
+                    egui::lerp(
+                        inner.top()..=inner.bottom(),
+                        (y as f32 / 1_080.0).clamp(0.0, 1.0),
+                    ),
+                );
+                painter.circle_filled(point, 4.5, palette.accent);
+                painter.circle_stroke(point, 7.0, Stroke::new(1.0_f32, palette.text));
+            }
+            ui.label(RichText::new(caption).small().color(if target.is_some() {
+                palette.text
+            } else {
+                palette.muted
+            }));
+        });
     }
 
     fn load_example(&mut self, tr: &impl Fn(&str) -> String) {
@@ -553,7 +825,7 @@ impl FlowStudio {
             action_node(
                 ids[0],
                 "studio_example_move_a",
-                [40.0, 140.0],
+                [40.0, 120.0],
                 Action::MouseMoveSmooth {
                     position: [320, 240],
                     duration_ms: 450,
@@ -562,13 +834,13 @@ impl FlowStudio {
             action_node(
                 ids[1],
                 "studio_example_pause",
-                [280.0, 140.0],
+                [300.0, 120.0],
                 Action::Wait { duration_ms: 500 },
             ),
             action_node(
                 ids[2],
                 "studio_example_move_b",
-                [520.0, 140.0],
+                [560.0, 120.0],
                 Action::MouseMoveSmooth {
                     position: [600, 360],
                     duration_ms: 450,
@@ -577,7 +849,7 @@ impl FlowStudio {
             FlowNode {
                 id: ids[3].to_owned(),
                 label: tr("studio_end_node"),
-                position: Some([760.0, 140.0]),
+                position: Some([820.0, 120.0]),
                 kind: FlowNodeKind::End,
             },
         ];
@@ -636,8 +908,8 @@ impl FlowStudio {
             .iter()
             .filter_map(|node| node.position.map(|p| p[1]))
             .fold(64.0_f32, f32::max);
-        let (mut x, mut y) = if max_x + 270.0 < CANVAS_LIMIT - NODE_SIZE.x {
-            (max_x + 270.0, max_y)
+        let (mut x, mut y) = if max_x + NODE_SIZE.x + NODE_GAP_X < CANVAS_LIMIT - NODE_SIZE.x {
+            (max_x + NODE_SIZE.x + NODE_GAP_X, max_y)
         } else {
             (40.0, max_y + 160.0)
         };
@@ -680,7 +952,10 @@ impl FlowStudio {
                     to_node_id: end_id.clone(),
                 });
                 if let Some(end) = self.program.nodes.iter_mut().find(|node| node.id == end_id) {
-                    end.position = Some([(x + 270.0).min(CANVAS_LIMIT - NODE_SIZE.x), y]);
+                    end.position = Some([
+                        (x + NODE_SIZE.x + NODE_GAP_X).min(CANVAS_LIMIT - NODE_SIZE.x),
+                        y,
+                    ]);
                 }
             } else if incoming.is_empty() && self.program.nodes.len() == 2 {
                 self.program.edges.push(FlowEdge {
@@ -762,7 +1037,10 @@ impl FlowStudio {
                 to_node_id: end_id.clone(),
             });
             if let Some(end) = self.program.nodes.iter_mut().find(|node| node.id == end_id) {
-                end.position = Some([(x + 270.0).min(CANVAS_LIMIT - NODE_SIZE.x), y]);
+                end.position = Some([
+                    (x + NODE_SIZE.x + NODE_GAP_X).min(CANVAS_LIMIT - NODE_SIZE.x),
+                    y,
+                ]);
             }
         }
         self.program.nodes.push(node);
@@ -794,7 +1072,7 @@ impl FlowStudio {
         self.program.nodes.push(FlowNode {
             id: loop_id.clone(),
             label: "Loop end".into(),
-            position: Some([x + 270.0, y + 150.0]),
+            position: Some([x + NODE_SIZE.x + NODE_GAP_X, y + NODE_SIZE.y + NODE_GAP_Y]),
             kind: FlowNodeKind::LoopEnd {
                 repeat_node_id: id.clone(),
             },
@@ -811,7 +1089,10 @@ impl FlowStudio {
                 to_node_id: end_id.clone(),
             });
             if let Some(end) = self.program.nodes.iter_mut().find(|node| node.id == end_id) {
-                end.position = Some([(x + 540.0).min(CANVAS_LIMIT - NODE_SIZE.x), y]);
+                end.position = Some([
+                    (x + 2.0 * (NODE_SIZE.x + NODE_GAP_X)).min(CANVAS_LIMIT - NODE_SIZE.x),
+                    y,
+                ]);
             }
         }
         self.selected_node_id = Some(id);
@@ -847,7 +1128,7 @@ impl FlowStudio {
             });
             if let Some(end_node) = self.program.nodes.iter_mut().find(|node| node.id == end_id) {
                 end_node.position = Some([
-                    (position[0] + 270.0).min(CANVAS_LIMIT - NODE_SIZE.x),
+                    (position[0] + NODE_SIZE.x + NODE_GAP_X).min(CANVAS_LIMIT - NODE_SIZE.x),
                     position[1],
                 ]);
             }
@@ -915,6 +1196,7 @@ impl FlowStudio {
         tr: &impl Fn(&str) -> String,
         appearance: StudioAppearance,
         locked: bool,
+        active_node_id: Option<&str>,
     ) -> bool {
         let mut changed = false;
         let accent = appearance.colors.accent;
@@ -973,13 +1255,14 @@ impl FlowStudio {
                 changed |= self.delete_selected_edge() || self.delete_selected_node();
             }
         }
-        let mut canvas_width = 1100.0_f32;
-        let mut canvas_height = 700.0_f32;
+        let available_canvas = ui.available_size();
+        let mut canvas_width = available_canvas.x.max(640.0);
+        let mut canvas_height = available_canvas.y.max(360.0);
         for (index, node) in self.program.nodes.iter_mut().enumerate() {
             if node.position.is_none() {
                 node.position = Some([
-                    52.0 + (index % 4) as f32 * 282.0,
-                    90.0 + (index / 4) as f32 * 170.0,
+                    40.0 + (index % 4) as f32 * (NODE_SIZE.x + NODE_GAP_X),
+                    64.0 + (index / 4) as f32 * (NODE_SIZE.y + NODE_GAP_Y),
                 ]);
                 changed = true;
             }
@@ -1123,23 +1406,52 @@ impl FlowStudio {
                     }
                     let kind = self.program.nodes[index].kind.clone();
                     let category = node_color(&kind, &palette);
+                    let is_playing = active_node_id == Some(id.as_str());
+                    let node_rounding = if matches!(kind, FlowNodeKind::End) {
+                        44.0
+                    } else {
+                        9.0
+                    };
+                    let highlight = if is_playing {
+                        palette.success
+                    } else {
+                        category
+                    };
                     if appearance.glow_strength > 0.01 {
                         painter.rect_filled(
-                            rect.expand(if is_selected { 5.0 } else { 2.0 }),
-                            12.0,
+                            rect.expand(if is_selected || is_playing { 5.0 } else { 2.0 }),
+                            node_rounding,
                             with_alpha(
-                                category,
-                                appearance.glow_strength * if is_selected { 0.23 } else { 0.08 },
+                                highlight,
+                                appearance.glow_strength
+                                    * if is_selected || is_playing {
+                                        0.25
+                                    } else {
+                                        0.07
+                                    },
                             ),
                         );
                     }
-                    painter.rect_filled(rect, 9.0, palette.panel_alt);
+                    let node_fill = if is_playing {
+                        with_alpha(palette.success, if palette.is_light { 0.16 } else { 0.12 })
+                    } else if is_selected {
+                        with_alpha(category, if palette.is_light { 0.13 } else { 0.10 })
+                    } else {
+                        palette.panel_alt
+                    };
+                    painter.rect_filled(rect, node_rounding, node_fill);
                     painter.rect_stroke(
                         rect,
-                        9.0,
+                        node_rounding,
                         Stroke::new(
-                            if is_selected { 2.0_f32 } else { 1.0_f32 },
-                            if is_selected {
+                            if is_selected || is_playing {
+                                1.8_f32
+                            } else {
+                                1.0_f32
+                            },
+                            if is_playing {
+                                palette.success
+                            } else if is_selected {
                                 category
                             } else {
                                 palette.border
@@ -1151,7 +1463,7 @@ impl FlowStudio {
                             rect.left_top(),
                             Pos2::new(rect.left() + 5.0, rect.bottom()),
                         ),
-                        egui::Rounding::same(8.0),
+                        egui::Rounding::same(node_rounding.min(8.0)),
                         category,
                     );
                     let (title, detail) = node_text(&self.program.nodes[index], tr);
@@ -1177,9 +1489,17 @@ impl FlowStudio {
                     painter.text(
                         rect.right_top() - Vec2::new(28.0, -17.0),
                         Align2::CENTER_CENTER,
-                        format!("#{}", index + 1),
+                        if id == self.program.entry_node_id {
+                            tr("studio_entry")
+                        } else {
+                            format!("#{}", index + 1)
+                        },
                         FontId::monospace(9.0),
-                        palette.muted,
+                        if is_playing {
+                            palette.success
+                        } else {
+                            palette.muted
+                        },
                     );
                     painter.text(
                         rect.left_top() + Vec2::new(16.0, 56.0),
@@ -1713,7 +2033,10 @@ fn sequence_position(index: usize) -> [f32; 2] {
     } else {
         COLUMNS - 1 - offset
     };
-    [72.0 + column as f32 * 282.0, 150.0 + row as f32 * 160.0]
+    [
+        40.0 + column as f32 * (NODE_SIZE.x + NODE_GAP_X),
+        64.0 + row as f32 * (NODE_SIZE.y + NODE_GAP_Y),
+    ]
 }
 
 fn default_action(index: usize) -> Action {
@@ -1918,15 +2241,50 @@ fn palette_button(
     color: Color32,
     enabled: bool,
 ) -> bool {
-    let text = format!("{label}   {shortcut}");
-    ui.add_enabled(
-        enabled,
-        egui::Button::new(RichText::new(text).size(12.0))
-            .fill(with_alpha(color, 0.12))
-            .stroke(Stroke::new(1.0_f32, with_alpha(color, 0.5)))
-            .min_size(Vec2::new(ui.available_width(), 36.0)),
-    )
-    .clicked()
+    ui.add_enabled_ui(enabled, |ui| {
+        let (rect, response) =
+            ui.allocate_exact_size(Vec2::new(ui.available_width(), 42.0), egui::Sense::click());
+        let painter = ui.painter_at(rect);
+        let fill = with_alpha(color, if response.hovered() { 0.20 } else { 0.10 });
+        painter.rect_filled(rect, 8.0, fill);
+        painter.rect_stroke(
+            rect,
+            8.0,
+            Stroke::new(
+                1.0_f32,
+                with_alpha(color, if response.hovered() { 0.8 } else { 0.42 }),
+            ),
+        );
+        let badge = egui::Rect::from_min_size(rect.min + Vec2::new(8.0, 8.0), Vec2::splat(26.0));
+        painter.rect_filled(badge, 6.0, with_alpha(color, 0.24));
+        painter.text(
+            badge.center(),
+            Align2::CENTER_CENTER,
+            shortcut.to_string(),
+            FontId::monospace(11.0),
+            color,
+        );
+        painter.text(
+            rect.min + Vec2::new(44.0, 13.0),
+            Align2::LEFT_TOP,
+            label,
+            FontId::proportional(12.0),
+            ui.visuals().text_color(),
+        );
+        response.clicked()
+    })
+    .inner
+}
+
+fn contrast_text_color(color: Color32) -> Color32 {
+    let luminance = 0.2126 * f32::from(color.r())
+        + 0.7152 * f32::from(color.g())
+        + 0.0722 * f32::from(color.b());
+    if luminance > 145.0 {
+        Color32::from_rgb(12, 20, 31)
+    } else {
+        Color32::WHITE
+    }
 }
 
 fn with_alpha(color: Color32, alpha: f32) -> Color32 {
