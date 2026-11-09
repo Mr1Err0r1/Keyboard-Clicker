@@ -853,7 +853,7 @@ impl ClickerApp {
             (max_y + FLOW_NODE_SIZE.y + 64.0).max(390.0),
         );
         let accent = theme::parse_color(&self.settings.accent_hex)
-            .unwrap_or(Color32::from_rgb(108, 140, 255));
+            .unwrap_or(Color32::from_rgb(20, 184, 246));
 
         egui::Frame::group(ui.style()).show(ui, |ui| {
             ui.horizontal(|ui| {
@@ -1029,17 +1029,20 @@ impl ClickerApp {
                     });
             });
         });
-        ui.add_space(14.0);
-        ui.label(RichText::new(tr("theme")).strong().size(18.0));
-        ui.label(RichText::new(tr("theme_hint")).weak());
+        ui.add_space(8.0);
         let mut selected_theme = None;
-        ui.horizontal_wrapped(|ui| {
-            for (id, name_key, _) in theme::THEMES {
-                let colors = theme::colors_for(id, &self.settings.accent_hex);
-                if draw_theme_card(ui, tr(name_key), colors, self.settings.theme == *id) {
-                    selected_theme = Some((*id).to_owned());
+        ui.group(|ui| {
+            ui.label(RichText::new(tr("theme")).strong().size(17.0));
+            ui.label(RichText::new(tr("theme_hint")).weak());
+            ui.add_space(5.0);
+            ui.horizontal_wrapped(|ui| {
+                for (id, name_key, _) in theme::THEMES {
+                    let colors = theme::colors_for(id, &self.settings.accent_hex);
+                    if draw_theme_card(ui, tr(name_key), colors, self.settings.theme == *id) {
+                        selected_theme = Some((*id).to_owned());
+                    }
                 }
-            }
+            });
         });
         if let Some(selected_theme) = selected_theme {
             if self.settings.theme != selected_theme {
@@ -1047,56 +1050,60 @@ impl ClickerApp {
                 self.dirty = true;
             }
         }
-        ui.add_space(14.0);
-        ui.separator();
-        ui.add_space(10.0);
+        ui.add_space(8.0);
         let mut picker_color = theme::parse_color(&self.settings.accent_hex)
-            .unwrap_or(Color32::from_rgb(108, 140, 255));
+            .unwrap_or(Color32::from_rgb(20, 184, 246));
         let mut picker_changed = false;
         let mut palette_selection = None;
-        ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new(tr("accent")).strong());
-            if ui
-                .color_edit_button_srgba(&mut picker_color)
-                .on_hover_text(tr("custom_color"))
-                .changed()
-            {
-                picker_changed = true;
-            }
-            if ui
-                .add(egui::TextEdit::singleline(&mut self.settings.accent_hex).desired_width(92.0))
-                .changed()
-            {
-                self.dirty = true;
-            }
-            if let Some(color) = theme::parse_color(&self.settings.accent_hex) {
-                let (swatch, _) =
-                    ui.allocate_exact_size(Vec2::new(18.0, 18.0), egui::Sense::hover());
-                ui.painter().rect_filled(swatch, 4.0, color);
-            }
-        });
-        ui.horizontal_wrapped(|ui| {
-            ui.label(tr("accent_palette"));
-            for hex in [
-                "#6C8CFF", "#3B82F6", "#06B6D4", "#10B981", "#84CC16", "#EAB308", "#F97316",
-                "#EF4444", "#EC4899", "#A855F7", "#8B5CF6", "#94A3B8",
-            ] {
-                let color = theme::parse_color(hex).expect("preset accent colors are valid");
-                let selected = self.settings.accent_hex.eq_ignore_ascii_case(hex);
-                let stroke = if selected {
-                    Stroke::new(2.0_f32, ui.visuals().text_color())
-                } else {
-                    Stroke::new(1.0_f32, ui.visuals().widgets.noninteractive.bg_stroke.color)
-                };
-                let swatch = egui::Button::new("").fill(color).stroke(stroke);
+        ui.group(|ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new(tr("accent")).strong());
                 if ui
-                    .add_sized(Vec2::splat(28.0), swatch)
-                    .on_hover_text(hex)
-                    .clicked()
+                    .color_edit_button_srgba(&mut picker_color)
+                    .on_hover_text(tr("custom_color"))
+                    .changed()
                 {
-                    palette_selection = Some(hex.to_owned());
+                    picker_changed = true;
                 }
-            }
+                if ui
+                    .add(
+                        egui::TextEdit::singleline(&mut self.settings.accent_hex)
+                            .desired_width(92.0),
+                    )
+                    .changed()
+                {
+                    self.dirty = true;
+                }
+                if let Some(color) = theme::parse_color(&self.settings.accent_hex) {
+                    let (swatch, _) =
+                        ui.allocate_exact_size(Vec2::new(18.0, 18.0), egui::Sense::hover());
+                    ui.painter().rect_filled(swatch, 4.0, color);
+                }
+            });
+            ui.horizontal_wrapped(|ui| {
+                ui.label(tr("accent_palette"));
+                for hex in [
+                    "#14B8F6", "#3B82F6", "#06B6D4", "#10B981", "#84CC16", "#EAB308", "#F97316",
+                    "#EF4444", "#EC4899", "#A855F7", "#8B5CF6", "#94A3B8",
+                ] {
+                    let color = theme::parse_color(hex).expect("preset accent colors are valid");
+                    let selected = self.settings.accent_hex.eq_ignore_ascii_case(hex);
+                    let stroke = if selected {
+                        Stroke::new(2.0_f32, ui.visuals().text_color())
+                    } else {
+                        Stroke::new(1.0_f32, ui.visuals().widgets.noninteractive.bg_stroke.color)
+                    };
+                    let swatch = egui::Button::new("").fill(color).stroke(stroke);
+                    if ui
+                        .add_sized(Vec2::splat(28.0), swatch)
+                        .on_hover_text(hex)
+                        .clicked()
+                    {
+                        palette_selection = Some(hex.to_owned());
+                    }
+                }
+            });
+            ui.label(RichText::new(tr("accent_hint")).weak());
         });
         if let Some(hex) = palette_selection {
             self.settings.accent_hex = hex;
@@ -1111,111 +1118,113 @@ impl ClickerApp {
         {
             theme::apply(ui.ctx(), &self.settings.theme, &self.settings.accent_hex);
         }
-        ui.label(RichText::new(tr("accent_hint")).weak());
-        ui.add_space(18.0);
-        ui.label(RichText::new(tr("canvas_background")).strong().size(18.0));
-        ui.label(RichText::new(tr("canvas_background_hint")).weak());
+        ui.add_space(8.0);
         let palette = theme::colors_for(&self.settings.theme, &self.settings.accent_hex);
         let mut selected_background = None;
-        ui.horizontal_wrapped(|ui| {
-            for (id, name_key) in theme::BACKGROUNDS {
-                if draw_background_card(
-                    ui,
-                    tr(name_key),
-                    id,
-                    palette,
-                    self.settings.background_intensity,
-                    theme::CanvasBackground::from_id(&self.settings.canvas_background)
-                        == theme::CanvasBackground::from_id(id),
-                ) {
-                    selected_background = Some((*id).to_owned());
+        ui.group(|ui| {
+            ui.label(RichText::new(tr("canvas_background")).strong().size(17.0));
+            ui.label(RichText::new(tr("canvas_background_hint")).weak());
+            ui.horizontal_wrapped(|ui| {
+                for (id, name_key) in theme::BACKGROUNDS {
+                    if draw_background_card(
+                        ui,
+                        tr(name_key),
+                        id,
+                        palette,
+                        self.settings.background_intensity,
+                        theme::CanvasBackground::from_id(&self.settings.canvas_background)
+                            == theme::CanvasBackground::from_id(id),
+                    ) {
+                        selected_background = Some((*id).to_owned());
+                    }
                 }
-            }
-        });
-        if let Some(selected_background) = selected_background {
-            if self.settings.canvas_background != selected_background {
-                self.settings.canvas_background = selected_background;
-                self.dirty = true;
-            }
-        }
-        ui.add_space(10.0);
-        ui.horizontal(|ui| {
-            ui.label(tr("background_intensity"));
-            if ui
-                .add(
-                    egui::Slider::new(&mut self.settings.background_intensity, 0..=100).suffix("%"),
-                )
-                .changed()
-            {
-                self.dirty = true;
-            }
-        });
-        ui.horizontal(|ui| {
-            ui.label(tr("glow_intensity"));
-            if ui
-                .add(egui::Slider::new(&mut self.settings.glow_intensity, 0..=100).suffix("%"))
-                .changed()
-            {
-                self.dirty = true;
-            }
-        });
-        ui.horizontal_wrapped(|ui| {
-            for (field, key) in [
-                (
-                    &mut self.settings.background_animations,
-                    "background_animations",
-                ),
-                (&mut self.settings.animated_edges, "animated_edges"),
-                (&mut self.settings.snap_to_grid, "snap_to_grid"),
-                (&mut self.settings.crt_overlay, "crt_overlay"),
-            ] {
-                if ui.checkbox(field, tr(key)).changed() {
+            });
+            if let Some(selected_background) = selected_background {
+                if self.settings.canvas_background != selected_background {
+                    self.settings.canvas_background = selected_background;
                     self.dirty = true;
                 }
             }
+            ui.add_space(10.0);
+            ui.horizontal(|ui| {
+                ui.label(tr("background_intensity"));
+                if ui
+                    .add(
+                        egui::Slider::new(&mut self.settings.background_intensity, 0..=100)
+                            .suffix("%"),
+                    )
+                    .changed()
+                {
+                    self.dirty = true;
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.label(tr("glow_intensity"));
+                if ui
+                    .add(egui::Slider::new(&mut self.settings.glow_intensity, 0..=100).suffix("%"))
+                    .changed()
+                {
+                    self.dirty = true;
+                }
+            });
+            ui.horizontal_wrapped(|ui| {
+                for (field, key) in [
+                    (
+                        &mut self.settings.background_animations,
+                        "background_animations",
+                    ),
+                    (&mut self.settings.animated_edges, "animated_edges"),
+                    (&mut self.settings.snap_to_grid, "snap_to_grid"),
+                    (&mut self.settings.crt_overlay, "crt_overlay"),
+                ] {
+                    if ui.checkbox(field, tr(key)).changed() {
+                        self.dirty = true;
+                    }
+                }
+            });
+            ui.label(
+                RichText::new(tr("background_animations_hint"))
+                    .small()
+                    .weak(),
+            );
         });
-        ui.label(
-            RichText::new(tr("background_animations_hint"))
-                .small()
-                .weak(),
-        );
-        ui.add_space(18.0);
-        ui.separator();
-        ui.add_space(10.0);
-        ui.label(RichText::new(tr("hotkeys")).strong().size(18.0));
-        ui.horizontal(|ui| {
-            ui.label(tr("start_hotkey"));
-            if ui
-                .text_edit_singleline(&mut self.settings.start_hotkey)
-                .changed()
-            {
+        ui.add_space(8.0);
+        ui.group(|ui| {
+            ui.label(RichText::new(tr("hotkeys")).strong().size(18.0));
+            ui.horizontal(|ui| {
+                ui.label(tr("start_hotkey"));
+                if ui
+                    .text_edit_singleline(&mut self.settings.start_hotkey)
+                    .changed()
+                {
+                    self.dirty = true;
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.label(tr("stop_hotkey"));
+                if ui
+                    .text_edit_singleline(&mut self.settings.stop_hotkey)
+                    .changed()
+                {
+                    self.dirty = true;
+                }
+            });
+            ui.label(RichText::new(tr("hotkey_hint")).weak());
+            ui.label(RichText::new(tr("appearance_hint")).weak());
+            if ui.button(tr("appearance_reset")).clicked() {
+                let defaults = crate::model::AppSettings::default();
+                self.settings.theme = defaults.theme;
+                self.settings.accent_hex = defaults.accent_hex;
+                self.settings.canvas_background = defaults.canvas_background;
+                self.settings.background_intensity = defaults.background_intensity;
+                self.settings.glow_intensity = defaults.glow_intensity;
+                self.settings.animated_edges = defaults.animated_edges;
+                self.settings.background_animations = defaults.background_animations;
+                self.settings.snap_to_grid = defaults.snap_to_grid;
+                self.settings.crt_overlay = defaults.crt_overlay;
                 self.dirty = true;
             }
         });
-        ui.horizontal(|ui| {
-            ui.label(tr("stop_hotkey"));
-            if ui
-                .text_edit_singleline(&mut self.settings.stop_hotkey)
-                .changed()
-            {
-                self.dirty = true;
-            }
-        });
-        ui.label(RichText::new(tr("hotkey_hint")).weak());
-        ui.label(RichText::new(tr("appearance_hint")).weak());
-        if ui.button(tr("appearance_reset")).clicked() {
-            let defaults = crate::model::AppSettings::default();
-            self.settings.theme = defaults.theme;
-            self.settings.accent_hex = defaults.accent_hex;
-            self.settings.canvas_background = defaults.canvas_background;
-            self.settings.background_intensity = defaults.background_intensity;
-            self.settings.glow_intensity = defaults.glow_intensity;
-            self.settings.animated_edges = defaults.animated_edges;
-            self.settings.background_animations = defaults.background_animations;
-            self.settings.snap_to_grid = defaults.snap_to_grid;
-            self.settings.crt_overlay = defaults.crt_overlay;
-            self.dirty = true;
-        }
         if self.settings.theme != original_theme
             || (self.settings.accent_hex != original_accent
                 && theme::parse_color(&self.settings.accent_hex).is_some())
