@@ -540,4 +540,24 @@ mod tests {
         assert!(started.elapsed() < Duration::from_secs(1));
         stopper.join().unwrap();
     }
+
+    #[test]
+    fn flow_run_trace_is_bounded_ordered_and_reset_between_runs() {
+        let state = EngineState::new();
+        state.reset_flow_trace();
+        for index in 0..(MAX_FLOW_RUN_EVENTS + 7) {
+            state.record_flow_node(&format!("node-{index}"));
+        }
+
+        let events = state.flow_events();
+        assert_eq!(events.len(), MAX_FLOW_RUN_EVENTS);
+        assert_eq!(events.first().unwrap().node_id, "node-7");
+        assert_eq!(events.last().unwrap().node_id, "node-70");
+        assert!(events
+            .windows(2)
+            .all(|pair| pair[0].elapsed_ms <= pair[1].elapsed_ms));
+
+        state.reset_flow_trace();
+        assert!(state.flow_events().is_empty());
+    }
 }
