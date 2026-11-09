@@ -515,9 +515,9 @@ impl FlowStudio {
                                 }
                                 ui.add_space(6.0);
                                 let available_height = ui.available_height();
-                                let monitor_height = (available_height * 0.30).clamp(132.0, 176.0);
+                                let monitor_height = (available_height * 0.26).clamp(88.0, 176.0);
                                 let canvas_height =
-                                    (available_height - monitor_height - 44.0).max(160.0);
+                                    (available_height - monitor_height - 44.0).max(120.0);
                                 let center_width = ui.available_width();
                                 ui.allocate_ui_with_layout(
                                     Vec2::new(center_width, canvas_height),
@@ -599,10 +599,15 @@ impl FlowStudio {
         flow_events: &[FlowRunEvent],
     ) {
         let palette = appearance.colors;
+        let compact = ui.available_height() < 145.0;
         egui::Frame::none()
             .fill(palette.panel_alt)
             .stroke(Stroke::new(1.0_f32, palette.border))
-            .inner_margin(egui::Margin::symmetric(10.0, 7.0))
+            .inner_margin(if compact {
+                egui::Margin::symmetric(7.0, 4.0)
+            } else {
+                egui::Margin::symmetric(10.0, 7.0)
+            })
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(
@@ -631,13 +636,19 @@ impl FlowStudio {
                         );
                     });
                 });
-                ui.add_space(5.0);
+                ui.add_space(if compact { 2.0 } else { 5.0 });
                 ui.horizontal(|ui| {
-                    self.draw_target_preview(ui, tr, appearance, locked, flow_events);
-                    ui.separator();
+                    if !compact {
+                        self.draw_target_preview(ui, tr, appearance, locked, flow_events);
+                        ui.separator();
+                    }
                     ui.vertical(|ui| {
                         if flow_events.is_empty() {
-                            ui.label(RichText::new(tr("studio_monitor_empty")).color(palette.text));
+                            ui.label(
+                                RichText::new(tr("studio_monitor_empty"))
+                                    .small()
+                                    .color(palette.text),
+                            );
                         } else {
                             egui::ScrollArea::horizontal()
                                 .id_source("studio_run_trace")
@@ -660,7 +671,10 @@ impl FlowStudio {
                                                     event.elapsed_ms as f32 / 1_000.0
                                                 );
                                                 ui.add_sized(
-                                                    Vec2::new(112.0, 48.0),
+                                                    Vec2::new(
+                                                        if compact { 104.0 } else { 112.0 },
+                                                        if compact { 32.0 } else { 48.0 },
+                                                    ),
                                                     egui::Button::new(RichText::new(label).small())
                                                         .fill(palette.panel)
                                                         .stroke(Stroke::new(
@@ -681,7 +695,10 @@ impl FlowStudio {
                                                 locked && index + 1 == flow_events.len();
                                             let response = ui
                                                 .add_sized(
-                                                    Vec2::new(118.0, 48.0),
+                                                    Vec2::new(
+                                                        if compact { 106.0 } else { 118.0 },
+                                                        if compact { 32.0 } else { 48.0 },
+                                                    ),
                                                     egui::Button::new(
                                                         RichText::new(label).small().strong(),
                                                     )
@@ -713,8 +730,10 @@ impl FlowStudio {
                         }
                     });
                 });
-                ui.add_space(3.0);
-                ui.label(RichText::new(tr("studio_monitor_hint")).small().weak());
+                if !compact {
+                    ui.add_space(3.0);
+                    ui.label(RichText::new(tr("studio_monitor_hint")).small().weak());
+                }
             });
     }
 
@@ -825,7 +844,7 @@ impl FlowStudio {
             action_node(
                 ids[0],
                 "studio_example_move_a",
-                [40.0, 120.0],
+                [8.0, 120.0],
                 Action::MouseMoveSmooth {
                     position: [320, 240],
                     duration_ms: 450,
@@ -834,13 +853,13 @@ impl FlowStudio {
             action_node(
                 ids[1],
                 "studio_example_pause",
-                [300.0, 120.0],
+                [220.0, 120.0],
                 Action::Wait { duration_ms: 500 },
             ),
             action_node(
                 ids[2],
                 "studio_example_move_b",
-                [560.0, 120.0],
+                [432.0, 120.0],
                 Action::MouseMoveSmooth {
                     position: [600, 360],
                     duration_ms: 450,
@@ -849,7 +868,7 @@ impl FlowStudio {
             FlowNode {
                 id: ids[3].to_owned(),
                 label: tr("studio_end_node"),
-                position: Some([820.0, 120.0]),
+                position: Some([644.0, 120.0]),
                 kind: FlowNodeKind::End,
             },
         ];
