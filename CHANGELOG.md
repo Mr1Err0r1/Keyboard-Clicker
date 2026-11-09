@@ -4,6 +4,17 @@ This project follows Semantic Versioning. Each published release should include 
 
 ## [Unreleased]
 
+### Added
+- A reference-inspired native Studio shell with grouped, color-coded node cards, distinct node icons, clearer connection ports, selectable links, and a dedicated connection inspector.
+- Eight coordinated appearance themes, thirteen canvas patterns (including Matrix Rain and Hearts & Sparkles), adjustable background/glow intensity, pausable background motion, grid snapping, animated edge markers, and an optional CRT overlay; all new preferences have backwards-compatible serde defaults.
+- Focus-aware palette shortcuts (`1`–`8`), separate immediate/smooth mouse-move action choices, and quick wait-duration presets.
+- Added a translated sample workflow that only moves the pointer and waits; users must explicitly press Start before anything runs.
+
+### Changed
+- Studio rendering now uses centralized theme tokens for panel, canvas, node, status, and connection colors; the accent palette and custom color picker continue to preview immediately, and animated canvas motion can be paused without a phase jump.
+- Improved the desktop header/navigation and added explicit ready/needs-attention status under the workflow canvas.
+- Expanded English, German, and Russian labels and updated the documented Studio interactions and appearance settings.
+
 ### Fixed
 - Restored the Automation Studio's separate vertical node palette, graph canvas, and properties inspector; compact widths preserve usable space for the canvas.
 - Added click-empty-to-clear selection, Escape to cancel a pending connection, and Delete/Backspace to remove the selected non-terminal node without deleting its terminal node or leaving dangling links.

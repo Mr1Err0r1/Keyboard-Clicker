@@ -84,6 +84,20 @@ pub struct AppSettings {
     pub locale: String,
     pub theme: String,
     pub accent_hex: String,
+    #[serde(default = "default_canvas_background")]
+    pub canvas_background: String,
+    #[serde(default = "default_background_intensity")]
+    pub background_intensity: u8,
+    #[serde(default = "default_glow_intensity")]
+    pub glow_intensity: u8,
+    #[serde(default = "default_true")]
+    pub snap_to_grid: bool,
+    #[serde(default = "default_true")]
+    pub animated_edges: bool,
+    #[serde(default = "default_true")]
+    pub background_animations: bool,
+    #[serde(default)]
+    pub crt_overlay: bool,
     /// Milliseconds between completed sequence cycles.
     pub interval_ms: u64,
     /// Zero means repeat until stopped.
@@ -96,6 +110,22 @@ pub struct AppSettings {
     pub flow_json: Option<String>,
 }
 
+fn default_canvas_background() -> String {
+    "grid".into()
+}
+
+fn default_background_intensity() -> u8 {
+    70
+}
+
+fn default_glow_intensity() -> u8 {
+    35
+}
+
+fn default_true() -> bool {
+    true
+}
+
 pub const MAX_SEQUENCE_STEPS: usize = 256;
 const MAX_ACTION_DURATION_MS: u64 = 86_400_000;
 pub const MAX_SMOOTH_MOVE_DURATION_MS: u64 = 120_000;
@@ -105,7 +135,14 @@ impl Default for AppSettings {
         Self {
             locale: "en".into(),
             theme: "dark".into(),
-            accent_hex: "#6C8CFF".into(),
+            accent_hex: "#14B8F6".into(),
+            canvas_background: default_canvas_background(),
+            background_intensity: default_background_intensity(),
+            glow_intensity: default_glow_intensity(),
+            snap_to_grid: true,
+            animated_edges: true,
+            background_animations: true,
+            crt_overlay: false,
             interval_ms: 100,
             repeat_count: 0,
             start_hotkey: "F6".into(),
@@ -118,6 +155,9 @@ impl Default for AppSettings {
 
 impl AppSettings {
     pub fn validate(&self) -> Result<(), String> {
+        if self.background_intensity > 100 || self.glow_intensity > 100 {
+            return Err("Appearance intensity values must be between 0 and 100.".into());
+        }
         if self.interval_ms == 0 {
             return Err("The cycle interval must be at least 1 ms.".into());
         }
@@ -313,5 +353,44 @@ mod tests {
             ..Default::default()
         };
         assert!(excessive_wait.validate().is_err());
+    }
+
+    #[test]
+    fn older_settings_files_receive_safe_appearance_defaults() {
+        let mut value = serde_json::to_value(AppSettings::default()).unwrap();
+        let object = value.as_object_mut().unwrap();
+        for key in [
+            "canvas_background",
+            "background_intensity",
+            "glow_intensity",
+            "snap_to_grid",
+            "animated_edges",
+            "background_animations",
+            "crt_overlay",
+        ] {
+            object.remove(key);
+        }
+        let restored: AppSettings = serde_json::from_value(value).unwrap();
+        assert_eq!(restored.canvas_background, "grid");
+        assert_eq!(restored.background_intensity, 70);
+        assert_eq!(restored.glow_intensity, 35);
+        assert!(restored.snap_to_grid);
+        assert!(restored.animated_edges);
+        assert!(restored.background_animations);
+        assert!(!restored.crt_overlay);
+    }
+
+    #[test]
+    fn rejects_visual_intensities_outside_the_supported_range() {
+        let settings = AppSettings {
+            background_intensity: 101,
+            ..Default::default()
+        };
+        assert!(settings.validate().is_err());
+        let settings = AppSettings {
+            glow_intensity: 101,
+            ..Default::default()
+        };
+        assert!(settings.validate().is_err());
     }
 }

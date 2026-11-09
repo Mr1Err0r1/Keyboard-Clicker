@@ -16,9 +16,18 @@ The Rust app targets 64-bit Windows 10/11 and x86_64 Linux. The default interfac
 
 ### Build automation sequences
 
-The default Automation Studio provides a node palette, a central graph canvas, and a properties inspector. Drag nodes to arrange the canvas; select a node to edit its properties, or select an output port and a target card to connect nodes. Click empty canvas space to clear selection, press `Esc` to cancel a pending connection, or press `Delete`/`Backspace` to remove the selected non-terminal node. Add mouse clicks, mouse moves, key presses and combinations (for example `Ctrl+A`), text entry, and timed waits. Flow-control nodes support conditions, typed variables, and bounded repeat loops. Import/export validated workflow JSON, including supported Autoflow Designer 1.0 action graphs. Set a cycle delay and repeat count, or use `0` to continue until stopped. Mouse clicks support left, right, and middle buttons, single/double clicks, held clicks, and optional fixed screen coordinates.
+The default Automation Studio provides a grouped, color-coded node palette, a central graph canvas, and a selection-aware properties inspector.
+Drag nodes to arrange the canvas; click an output port and a target node to connect them; click a connection to select and delete it independently.
+`1`–`5` add actions, `6`–`8` add flow-control nodes, `Esc` clears/cancels selection, and `Delete`/`Backspace` removes the selected node or link.
+The palette can load a safe sample graph containing only pointer moves and waits; it never starts automation by itself.
+The canvas supports grid snapping and optional animated connections. Add mouse clicks, immediate or smooth mouse movement, key presses and combinations (for example `Ctrl+A`), text entry, and timed waits.
+Flow-control nodes support conditions, typed variables, and bounded repeat loops. Import/export validated workflow JSON, including supported Autoflow Designer 1.0 action graphs.
+Set a cycle delay and repeat count, or use `0` to continue until stopped. Mouse clicks support left, right, and middle buttons, single/double clicks, held clicks, and optional fixed screen coordinates.
 
-Studio saves its graph draft automatically and can import/export validated JSON workflows. Graphs support up to 256 executable steps plus a terminal node; waits and holds are bounded to 24 hours each. Studio and the Classic sequence editor keep separate workflows, which is called out in the UI; changing one does not silently overwrite the other. Start is disabled until the graph validates. Global hotkeys work when supported by the desktop session. The automation runs in a separate worker; stop requests interrupt waits and held keys/buttons are released before the worker exits.
+Studio saves its graph draft automatically and can import/export validated JSON workflows. Graphs support up to 256 executable steps plus a terminal node; waits and holds are bounded to 24 hours each.
+Studio and the Classic sequence editor keep separate workflows, which is called out in the UI; changing one does not silently overwrite the other.
+Start is disabled until the graph validates, and the canvas shows whether the flow is ready or needs attention. Global hotkeys work when supported by the desktop session.
+The automation runs in a separate worker; stop requests interrupt waits and held keys/buttons are released before the worker exits.
 
 ### Graph runtime foundation
 
@@ -28,7 +37,11 @@ The default global hotkeys are F6 to start and F7 to stop. Change them in Appear
 
 ### Appearance, languages, and settings
 
-Choose a dark or light theme, pick an accent from the color palette, or use the custom color picker and six-digit HEX field. Accent and theme changes preview immediately and are saved automatically. To add a language, place a UTF-8 JSON file such as `pt-BR.json` in the `locales` folder under the app's configuration directory. Use [`locales/en.json`](locales/en.json) as the key reference. Missing translation keys fall back to English; restart the app after adding a language.
+Choose from eight coordinated themes (Midnight, Daylight, Cyberpunk, Terminal, Modern Glass, Synthwave, Arctic, and Kawaii), pick an accent from the color palette, or use the custom color picker and six-digit HEX field.
+The Studio canvas offers thirteen backgrounds, including Matrix Rain and Hearts & Sparkles, with adjustable intensity, pausable background motion, animated connections, grid snapping, and an optional CRT overlay.
+Theme and accent changes preview immediately; appearance settings are saved automatically and older settings files receive safe defaults.
+To add a language, place a UTF-8 JSON file such as `pt-BR.json` in the `locales` folder under the app's configuration directory.
+Use [`locales/en.json`](locales/en.json) as the key reference. Missing translation keys fall back to English; restart the app after adding a language.
 
 Settings are stored in `settings.json` under `KeyboardClicker` in the current user's configuration directory: normally `%APPDATA%\KeyboardClicker` on Windows and `$XDG_CONFIG_HOME/KeyboardClicker` (usually `~/.config/KeyboardClicker`) on Linux. No administrator privileges are required.
 

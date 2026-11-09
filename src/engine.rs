@@ -4,6 +4,7 @@ use crate::{
 };
 use enigo::{Enigo, Key, KeyboardControllable, MouseButton as EnigoMouseButton, MouseControllable};
 use std::{
+    collections::VecDeque,
     panic::{catch_unwind, AssertUnwindSafe},
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
@@ -13,11 +14,21 @@ use std::{
     time::{Duration, Instant},
 };
 
+const MAX_FLOW_RUN_EVENTS: usize = 64;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FlowRunEvent {
+    pub node_id: String,
+    pub elapsed_ms: u64,
+}
+
 #[derive(Clone)]
 pub struct EngineState {
     running: Arc<AtomicBool>,
     completed_cycles: Arc<AtomicU64>,
     last_error: Arc<Mutex<Option<String>>>,
+    run_started_at: Arc<Mutex<Option<Instant>>>,
+    flow_events: Arc<Mutex<VecDeque<FlowRunEvent>>>,
 }
 
 impl EngineState {
@@ -26,6 +37,8 @@ impl EngineState {
             running: Arc::new(AtomicBool::new(false)),
             completed_cycles: Arc::new(AtomicU64::new(0)),
             last_error: Arc::new(Mutex::new(None)),
+            run_started_at: Arc::new(Mutex::new(None)),
+            flow_events: Arc::new(Mutex::new(VecDeque::new())),
         }
     }
     pub fn is_running(&self) -> bool {
@@ -33,6 +46,44 @@ impl EngineState {
     }
     pub fn completed_cycles(&self) -> u64 {
         self.completed_cycles.load(Ordering::Relaxed)
+    }
+    pub fn flow_events(&self) -> Vec<FlowRunEvent> {
+        self.flow_events
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .iter()
+            .cloned()
+            .collect()
+    }
+    fn reset_flow_trace(&self) {
+        *self
+            .run_started_at
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(Instant::now());
+        self.flow_events
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clear();
+    }
+    fn record_flow_node(&self, node_id: &str) {
+        let elapsed_ms = self
+            .run_started_at
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_ref()
+            .map(|started| started.elapsed().as_millis() as u64)
+            .unwrap_or(0);
+        let mut events = self
+            .flow_events
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if events.len() == MAX_FLOW_RUN_EVENTS {
+            events.pop_front();
+        }
+        events.push_back(FlowRunEvent {
+            node_id: node_id.to_owned(),
+            elapsed_ms,
+        });
     }
     pub fn take_error(&self) -> Option<String> {
         self.last_error
@@ -125,6 +176,7 @@ impl AutomationEngine {
             let _ = worker.join();
         }
         self.state.completed_cycles.store(0, Ordering::Relaxed);
+        self.state.reset_flow_trace();
         *self
             .state
             .last_error
@@ -232,6 +284,10 @@ struct EnigoFlowHost {
 impl FlowHost for EnigoFlowHost {
     fn is_cancelled(&self) -> bool {
         !self.state.is_running()
+    }
+
+    fn node_started(&mut self, node: &crate::flow::FlowNode) {
+        self.state.record_flow_node(&node.id);
     }
 
     fn execute_action(&mut self, action: &Action) -> Result<(), String> {
@@ -483,5 +539,25 @@ mod tests {
         assert!(!sleep_interruptible(Duration::from_secs(5), &state));
         assert!(started.elapsed() < Duration::from_secs(1));
         stopper.join().unwrap();
+    }
+
+    #[test]
+    fn flow_run_trace_is_bounded_ordered_and_reset_between_runs() {
+        let state = EngineState::new();
+        state.reset_flow_trace();
+        for index in 0..(MAX_FLOW_RUN_EVENTS + 7) {
+            state.record_flow_node(&format!("node-{index}"));
+        }
+
+        let events = state.flow_events();
+        assert_eq!(events.len(), MAX_FLOW_RUN_EVENTS);
+        assert_eq!(events.first().unwrap().node_id, "node-7");
+        assert_eq!(events.last().unwrap().node_id, "node-70");
+        assert!(events
+            .windows(2)
+            .all(|pair| pair[0].elapsed_ms <= pair[1].elapsed_ms));
+
+        state.reset_flow_trace();
+        assert!(state.flow_events().is_empty());
     }
 }

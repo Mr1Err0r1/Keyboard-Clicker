@@ -210,23 +210,25 @@ impl ClickerApp {
         let catalog = self.catalog.clone();
         let locale = self.settings.locale.clone();
         let tr = |key: &str| catalog.text(&locale, key);
-        ui.horizontal(|ui| {
-            ui.label(RichText::new(tr("studio_mode_note")).weak());
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button(tr("studio_classic")).clicked() {
-                    self.studio_mode = false;
-                }
-            });
-        });
-        ui.label(RichText::new(tr("studio_separate_classic")).small().weak());
-        let accent = theme::parse_color(&self.settings.accent_hex)
-            .unwrap_or(Color32::from_rgb(58, 166, 232));
+        let appearance = theme::studio_appearance(
+            &self.settings.theme,
+            &self.settings.accent_hex,
+            &self.settings.canvas_background,
+            self.settings.background_intensity,
+            self.settings.glow_intensity,
+            self.settings.snap_to_grid,
+            self.settings.animated_edges,
+            self.settings.background_animations,
+            self.settings.crt_overlay,
+        );
+        let flow_events = self.state.flow_events();
         let (command, changed) = self.studio.draw(
             ui,
             &tr,
-            accent,
+            appearance,
             self.state.is_running(),
             self.state.completed_cycles(),
+            &flow_events,
             &mut self.settings.interval_ms,
             &mut self.settings.repeat_count,
         );
@@ -264,7 +266,7 @@ impl ClickerApp {
             } else {
                 (tr("status_ready"), Color32::from_rgb(150, 160, 180))
             };
-            ui.label(RichText::new(format!("● {label}")).color(color).strong());
+            ui.label(RichText::new(label).color(color).strong());
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button(tr("studio_open")).clicked() {
                     self.studio_mode = true;
@@ -851,7 +853,7 @@ impl ClickerApp {
             (max_y + FLOW_NODE_SIZE.y + 64.0).max(390.0),
         );
         let accent = theme::parse_color(&self.settings.accent_hex)
-            .unwrap_or(Color32::from_rgb(108, 140, 255));
+            .unwrap_or(Color32::from_rgb(20, 184, 246));
 
         egui::Frame::group(ui.style()).show(ui, |ui| {
             ui.horizontal(|ui| {
@@ -1008,84 +1010,100 @@ impl ClickerApp {
         let original_theme = self.settings.theme.clone();
         let original_accent = self.settings.accent_hex.clone();
         ui.heading(tr("appearance_title"));
-        ui.add_space(12.0);
-        ui.horizontal(|ui| {
-            ui.label(tr("language"));
-            egui::ComboBox::from_id_source("locale")
-                .selected_text(self.catalog.text(&self.settings.locale, "language_name"))
-                .show_ui(ui, |ui| {
-                    for (code, name) in self.catalog.languages() {
-                        if ui
-                            .selectable_value(&mut self.settings.locale, code, name)
-                            .changed()
-                        {
-                            self.dirty = true;
+        ui.label(RichText::new(tr("appearance_subtitle")).weak());
+        ui.add_space(16.0);
+        ui.group(|ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(tr("language")).strong());
+                egui::ComboBox::from_id_source("locale")
+                    .selected_text(self.catalog.text(&self.settings.locale, "language_name"))
+                    .show_ui(ui, |ui| {
+                        for (code, name) in self.catalog.languages() {
+                            if ui
+                                .selectable_value(&mut self.settings.locale, code, name)
+                                .changed()
+                            {
+                                self.dirty = true;
+                            }
                         }
-                    }
-                });
+                    });
+            });
         });
         ui.add_space(8.0);
-        ui.horizontal(|ui| {
-            ui.label(tr("theme"));
-            if ui
-                .selectable_value(&mut self.settings.theme, "dark".into(), tr("dark"))
-                .changed()
-            {
-                self.dirty = true;
-            }
-            if ui
-                .selectable_value(&mut self.settings.theme, "light".into(), tr("light"))
-                .changed()
-            {
-                self.dirty = true;
-            }
+        let mut selected_theme = None;
+        ui.group(|ui| {
+            ui.label(RichText::new(tr("theme")).strong().size(17.0));
+            ui.label(RichText::new(tr("theme_hint")).weak());
+            ui.add_space(5.0);
+            ui.horizontal_wrapped(|ui| {
+                for (id, name_key, _) in theme::THEMES {
+                    let colors = theme::colors_for(id, &self.settings.accent_hex);
+                    if draw_theme_card(ui, tr(name_key), colors, self.settings.theme == *id) {
+                        selected_theme = Some((*id).to_owned());
+                    }
+                }
+            });
         });
+        if let Some(selected_theme) = selected_theme {
+            if self.settings.theme != selected_theme {
+                self.settings.theme = selected_theme;
+                self.dirty = true;
+            }
+        }
         ui.add_space(8.0);
         let mut picker_color = theme::parse_color(&self.settings.accent_hex)
-            .unwrap_or(Color32::from_rgb(108, 140, 255));
+            .unwrap_or(Color32::from_rgb(20, 184, 246));
         let mut picker_changed = false;
         let mut palette_selection = None;
-        ui.horizontal_wrapped(|ui| {
-            ui.label(tr("accent"));
-            if ui
-                .color_edit_button_srgba(&mut picker_color)
-                .on_hover_text(tr("custom_color"))
-                .changed()
-            {
-                picker_changed = true;
-            }
-            if ui
-                .add(egui::TextEdit::singleline(&mut self.settings.accent_hex).desired_width(92.0))
-                .changed()
-            {
-                self.dirty = true;
-            }
-            if let Some(color) = theme::parse_color(&self.settings.accent_hex) {
-                ui.colored_label(color, "●  ");
-            }
-        });
-        ui.horizontal_wrapped(|ui| {
-            ui.label(tr("accent_palette"));
-            for hex in [
-                "#6C8CFF", "#3B82F6", "#06B6D4", "#10B981", "#84CC16", "#EAB308", "#F97316",
-                "#EF4444", "#EC4899", "#A855F7", "#8B5CF6", "#94A3B8",
-            ] {
-                let color = theme::parse_color(hex).expect("preset accent colors are valid");
-                let selected = self.settings.accent_hex.eq_ignore_ascii_case(hex);
-                let stroke = if selected {
-                    Stroke::new(2.0_f32, ui.visuals().text_color())
-                } else {
-                    Stroke::new(1.0_f32, ui.visuals().widgets.noninteractive.bg_stroke.color)
-                };
-                let swatch = egui::Button::new("").fill(color).stroke(stroke);
+        ui.group(|ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new(tr("accent")).strong());
                 if ui
-                    .add_sized(Vec2::splat(28.0), swatch)
-                    .on_hover_text(hex)
-                    .clicked()
+                    .color_edit_button_srgba(&mut picker_color)
+                    .on_hover_text(tr("custom_color"))
+                    .changed()
                 {
-                    palette_selection = Some(hex.to_owned());
+                    picker_changed = true;
                 }
-            }
+                if ui
+                    .add(
+                        egui::TextEdit::singleline(&mut self.settings.accent_hex)
+                            .desired_width(92.0),
+                    )
+                    .changed()
+                {
+                    self.dirty = true;
+                }
+                if let Some(color) = theme::parse_color(&self.settings.accent_hex) {
+                    let (swatch, _) =
+                        ui.allocate_exact_size(Vec2::new(18.0, 18.0), egui::Sense::hover());
+                    ui.painter().rect_filled(swatch, 4.0, color);
+                }
+            });
+            ui.horizontal_wrapped(|ui| {
+                ui.label(tr("accent_palette"));
+                for hex in [
+                    "#14B8F6", "#3B82F6", "#06B6D4", "#10B981", "#84CC16", "#EAB308", "#F97316",
+                    "#EF4444", "#EC4899", "#A855F7", "#8B5CF6", "#94A3B8",
+                ] {
+                    let color = theme::parse_color(hex).expect("preset accent colors are valid");
+                    let selected = self.settings.accent_hex.eq_ignore_ascii_case(hex);
+                    let stroke = if selected {
+                        Stroke::new(2.0_f32, ui.visuals().text_color())
+                    } else {
+                        Stroke::new(1.0_f32, ui.visuals().widgets.noninteractive.bg_stroke.color)
+                    };
+                    let swatch = egui::Button::new("").fill(color).stroke(stroke);
+                    if ui
+                        .add_sized(Vec2::splat(28.0), swatch)
+                        .on_hover_text(hex)
+                        .clicked()
+                    {
+                        palette_selection = Some(hex.to_owned());
+                    }
+                }
+            });
+            ui.label(RichText::new(tr("accent_hint")).weak());
         });
         if let Some(hex) = palette_selection {
             self.settings.accent_hex = hex;
@@ -1100,31 +1118,119 @@ impl ClickerApp {
         {
             theme::apply(ui.ctx(), &self.settings.theme, &self.settings.accent_hex);
         }
-        ui.label(RichText::new(tr("accent_hint")).weak());
-        ui.add_space(12.0);
-        ui.label(RichText::new(tr("appearance_hint")).weak());
-        ui.add_space(12.0);
-        ui.horizontal(|ui| {
-            ui.label(tr("start_hotkey"));
-            if ui
-                .text_edit_singleline(&mut self.settings.start_hotkey)
-                .changed()
-            {
-                self.dirty = true;
-            }
-        });
-        ui.horizontal(|ui| {
-            ui.label(tr("stop_hotkey"));
-            if ui
-                .text_edit_singleline(&mut self.settings.stop_hotkey)
-                .changed()
-            {
-                self.dirty = true;
-            }
-        });
-        ui.label(RichText::new(tr("hotkey_hint")).weak());
         ui.add_space(8.0);
-        ui.label(tr("updating"));
+        let palette = theme::colors_for(&self.settings.theme, &self.settings.accent_hex);
+        let mut selected_background = None;
+        ui.group(|ui| {
+            ui.label(RichText::new(tr("canvas_background")).strong().size(17.0));
+            ui.label(RichText::new(tr("canvas_background_hint")).weak());
+            ui.horizontal_wrapped(|ui| {
+                for (id, name_key) in theme::BACKGROUNDS {
+                    if draw_background_card(
+                        ui,
+                        tr(name_key),
+                        id,
+                        palette,
+                        self.settings.background_intensity,
+                        theme::CanvasBackground::from_id(&self.settings.canvas_background)
+                            == theme::CanvasBackground::from_id(id),
+                    ) {
+                        selected_background = Some((*id).to_owned());
+                    }
+                }
+            });
+            if let Some(selected_background) = selected_background {
+                if self.settings.canvas_background != selected_background {
+                    self.settings.canvas_background = selected_background;
+                    self.dirty = true;
+                }
+            }
+            ui.add_space(10.0);
+            ui.horizontal(|ui| {
+                ui.label(tr("background_intensity"));
+                if ui
+                    .add(
+                        egui::Slider::new(&mut self.settings.background_intensity, 0..=100)
+                            .suffix("%"),
+                    )
+                    .changed()
+                {
+                    self.dirty = true;
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.label(tr("glow_intensity"));
+                if ui
+                    .add(egui::Slider::new(&mut self.settings.glow_intensity, 0..=100).suffix("%"))
+                    .changed()
+                {
+                    self.dirty = true;
+                }
+            });
+            ui.horizontal_wrapped(|ui| {
+                for (field, key) in [
+                    (
+                        &mut self.settings.background_animations,
+                        "background_animations",
+                    ),
+                    (&mut self.settings.animated_edges, "animated_edges"),
+                    (&mut self.settings.snap_to_grid, "snap_to_grid"),
+                    (&mut self.settings.crt_overlay, "crt_overlay"),
+                ] {
+                    if ui.checkbox(field, tr(key)).changed() {
+                        self.dirty = true;
+                    }
+                }
+            });
+            ui.label(
+                RichText::new(tr("background_animations_hint"))
+                    .small()
+                    .weak(),
+            );
+        });
+        ui.add_space(8.0);
+        ui.group(|ui| {
+            ui.label(RichText::new(tr("hotkeys")).strong().size(18.0));
+            ui.horizontal(|ui| {
+                ui.label(tr("start_hotkey"));
+                if ui
+                    .text_edit_singleline(&mut self.settings.start_hotkey)
+                    .changed()
+                {
+                    self.dirty = true;
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.label(tr("stop_hotkey"));
+                if ui
+                    .text_edit_singleline(&mut self.settings.stop_hotkey)
+                    .changed()
+                {
+                    self.dirty = true;
+                }
+            });
+            ui.label(RichText::new(tr("hotkey_hint")).weak());
+            ui.label(RichText::new(tr("appearance_hint")).weak());
+            if ui.button(tr("appearance_reset")).clicked() {
+                let defaults = crate::model::AppSettings::default();
+                self.settings.theme = defaults.theme;
+                self.settings.accent_hex = defaults.accent_hex;
+                self.settings.canvas_background = defaults.canvas_background;
+                self.settings.background_intensity = defaults.background_intensity;
+                self.settings.glow_intensity = defaults.glow_intensity;
+                self.settings.animated_edges = defaults.animated_edges;
+                self.settings.background_animations = defaults.background_animations;
+                self.settings.snap_to_grid = defaults.snap_to_grid;
+                self.settings.crt_overlay = defaults.crt_overlay;
+                self.dirty = true;
+            }
+        });
+        if self.settings.theme != original_theme
+            || (self.settings.accent_hex != original_accent
+                && theme::parse_color(&self.settings.accent_hex).is_some())
+        {
+            theme::apply(ui.ctx(), &self.settings.theme, &self.settings.accent_hex);
+        }
     }
 
     fn draw_about(&mut self, ui: &mut egui::Ui) {
@@ -1285,79 +1391,119 @@ impl eframe::App for ClickerApp {
             self.message = Some((error, true));
         }
         theme::apply(ctx, &self.settings.theme, &self.settings.accent_hex);
-        egui::TopBottomPanel::top("header").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.heading(RichText::new(self.tr("app_title")).strong());
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if self.state.is_running() {
-                        ui.colored_label(
-                            Color32::from_rgb(71, 201, 135),
-                            format!("● {}", self.tr("status_running")),
-                        );
-                    } else {
-                        ui.label(format!("● {}", self.tr("status_ready")));
-                    }
-                });
-            });
-        });
-        egui::SidePanel::left("navigation")
-            .resizable(false)
-            .default_width(155.0)
+        let palette = theme::colors_for(&self.settings.theme, &self.settings.accent_hex);
+        let studio_workspace = self.page == Page::Automation && self.studio_mode;
+        egui::TopBottomPanel::top("header")
+            .frame(
+                egui::Frame::none()
+                    .fill(palette.panel)
+                    .stroke(Stroke::new(1.0_f32, palette.border))
+                    .inner_margin(egui::Margin::symmetric(14.0, 7.0)),
+            )
             .show(ctx, |ui| {
-                ui.add_space(12.0);
-                for (page, key) in [
-                    (Page::Automation, "nav_automation"),
-                    (Page::Appearance, "nav_appearance"),
-                    (Page::About, "nav_about"),
-                ] {
-                    if ui
-                        .selectable_label(self.page == page, self.tr(key))
-                        .clicked()
-                    {
-                        self.page = page;
-                    }
-                }
-                ui.add_space(20.0);
-                ui.separator();
-                ui.label(
-                    RichText::new(format!(
-                        "{}  {}",
-                        self.settings.start_hotkey,
-                        self.tr("start")
-                    ))
-                    .weak(),
-                );
-                ui.label(
-                    RichText::new(format!(
-                        "{}  {}",
-                        self.settings.stop_hotkey,
-                        self.tr("stop")
-                    ))
-                    .weak(),
-                );
-            });
-        egui::CentralPanel::default().show(ctx, |ui| {
-            egui::ScrollArea::vertical()
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    match self.page {
-                        Page::Automation => self.draw_automation(ui),
-                        Page::Appearance => self.draw_appearance(ui),
-                        Page::About => self.draw_about(ui),
-                    }
-                    if let Some((message, is_error)) = &self.message {
-                        ui.add_space(12.0);
-                        if *is_error {
-                            ui.colored_label(
-                                Color32::LIGHT_RED,
-                                format!("{}: {message}", self.tr("error")),
-                            );
+                ui.horizontal(|ui| {
+                    let (logo, _) = ui.allocate_exact_size(Vec2::splat(34.0), egui::Sense::hover());
+                    ui.painter().rect_filled(logo, 8.0, palette.accent);
+                    ui.painter().text(
+                        logo.center(),
+                        Align2::CENTER_CENTER,
+                        "KC",
+                        FontId::proportional(13.0),
+                        Color32::WHITE,
+                    );
+                    ui.vertical(|ui| {
+                        ui.label(RichText::new(self.tr("app_title")).strong().size(15.0));
+                        ui.label(
+                            RichText::new(self.tr("studio_title"))
+                                .small()
+                                .color(palette.muted),
+                        );
+                    });
+                    ui.add_space(10.0);
+                    ui.separator();
+                    for (key, page, mode) in [
+                        ("nav_studio", Page::Automation, Some(true)),
+                        ("nav_classic", Page::Automation, Some(false)),
+                        ("nav_appearance", Page::Appearance, None),
+                        ("nav_about", Page::About, None),
+                    ] {
+                        let selected = self.page == page
+                            && mode.is_none_or(|is_studio| self.studio_mode == is_studio);
+                        let fill = if selected {
+                            Color32::from_rgba_unmultiplied(
+                                palette.accent.r(),
+                                palette.accent.g(),
+                                palette.accent.b(),
+                                if palette.is_light { 30 } else { 42 },
+                            )
                         } else {
-                            ui.weak(message);
+                            palette.panel
+                        };
+                        let stroke = if selected {
+                            palette.accent
+                        } else {
+                            palette.panel
+                        };
+                        if ui
+                            .add_sized(
+                                Vec2::new(88.0, 34.0),
+                                egui::Button::new(RichText::new(self.tr(key)).size(12.0))
+                                    .fill(fill)
+                                    .stroke(Stroke::new(1.0_f32, stroke)),
+                            )
+                            .clicked()
+                        {
+                            self.page = page;
+                            if let Some(is_studio) = mode {
+                                self.studio_mode = is_studio;
+                            }
                         }
                     }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(
+                            RichText::new(format!(
+                                "{}  {}",
+                                self.tr("status_cycles"),
+                                self.state.completed_cycles()
+                            ))
+                            .small()
+                            .color(palette.muted),
+                        );
+                        ui.separator();
+                        if self.state.is_running() {
+                            ui.colored_label(palette.success, self.tr("status_running"));
+                        } else {
+                            ui.colored_label(palette.muted, self.tr("status_ready"));
+                        }
+                    });
                 });
-        });
+            });
+        egui::CentralPanel::default()
+            .frame(egui::Frame::none().fill(palette.app_background))
+            .show(ctx, |ui| {
+                if studio_workspace {
+                    self.draw_automation(ui);
+                } else {
+                    egui::ScrollArea::vertical()
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| match self.page {
+                            Page::Automation => self.draw_automation(ui),
+                            Page::Appearance => self.draw_appearance(ui),
+                            Page::About => self.draw_about(ui),
+                        });
+                }
+                if let Some((message, is_error)) = &self.message {
+                    ui.add_space(8.0);
+                    if *is_error {
+                        ui.colored_label(
+                            Color32::LIGHT_RED,
+                            format!("{}: {message}", self.tr("error")),
+                        );
+                    } else {
+                        ui.weak(message);
+                    }
+                }
+            });
         if theme::parse_color(&self.settings.accent_hex).is_none() {
             self.message = Some((self.tr("invalid_accent"), true));
         }
@@ -1403,8 +1549,11 @@ fn validate_settings_file(settings: &AppSettings, catalog: &Catalog) -> Result<(
     {
         return Err("invalid_language");
     }
-    if settings.theme != "dark" && settings.theme != "light" {
+    if !theme::is_supported_theme(&settings.theme) {
         return Err("invalid_theme");
+    }
+    if !theme::is_supported_background(&settings.canvas_background) {
+        return Err("invalid_background");
     }
     if theme::parse_color(&settings.accent_hex).is_none() {
         return Err("invalid_accent");
@@ -1413,6 +1562,342 @@ fn validate_settings_file(settings: &AppSettings, catalog: &Catalog) -> Result<(
         return Err("invalid_hotkeys");
     }
     Ok(())
+}
+
+fn draw_theme_card(
+    ui: &mut egui::Ui,
+    title: String,
+    palette: theme::ThemeColors,
+    selected: bool,
+) -> bool {
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(146.0, 72.0), egui::Sense::click());
+    let painter = ui.painter_at(rect);
+    painter.rect_filled(rect, 8.0, palette.panel);
+    painter.rect_stroke(
+        rect,
+        8.0,
+        Stroke::new(
+            if selected { 2.0 } else { 1.0_f32 },
+            if selected {
+                palette.accent
+            } else {
+                palette.border
+            },
+        ),
+    );
+    painter.rect_filled(
+        egui::Rect::from_min_size(rect.min + Vec2::new(10.0, 11.0), Vec2::new(45.0, 48.0)),
+        5.0,
+        palette.canvas,
+    );
+    painter.rect_filled(
+        egui::Rect::from_min_size(rect.min + Vec2::new(15.0, 17.0), Vec2::new(22.0, 12.0)),
+        3.0,
+        palette.accent,
+    );
+    painter.line_segment(
+        [
+            rect.min + Vec2::new(38.0, 23.0),
+            rect.min + Vec2::new(47.0, 23.0),
+        ],
+        Stroke::new(2.0_f32, palette.grid),
+    );
+    painter.rect_filled(
+        egui::Rect::from_min_size(rect.min + Vec2::new(47.0, 17.0), Vec2::new(5.0, 12.0)),
+        2.0,
+        palette.move_node,
+    );
+    painter.text(
+        rect.min + Vec2::new(60.0, 19.0),
+        Align2::LEFT_TOP,
+        title,
+        FontId::proportional(13.0),
+        palette.text,
+    );
+    response.clicked()
+}
+
+fn draw_background_card(
+    ui: &mut egui::Ui,
+    title: String,
+    background_id: &str,
+    palette: theme::ThemeColors,
+    intensity: u8,
+    selected: bool,
+) -> bool {
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(88.0, 62.0), egui::Sense::click());
+    let painter = ui.painter_at(rect);
+    painter.rect_filled(rect, 6.0, palette.panel);
+    painter.rect_stroke(
+        rect,
+        6.0,
+        Stroke::new(
+            if selected { 2.0 } else { 1.0_f32 },
+            if selected {
+                palette.accent
+            } else {
+                palette.border
+            },
+        ),
+    );
+    let sample = rect.shrink2(Vec2::new(5.0, 5.0));
+    let preview = egui::Rect::from_min_max(
+        sample.left_top(),
+        Pos2::new(sample.right(), sample.bottom() - 17.0),
+    );
+    painter.rect_filled(preview, 4.0, palette.canvas);
+    paint_background_preview(
+        &painter,
+        preview,
+        theme::CanvasBackground::from_id(background_id).unwrap_or(theme::CanvasBackground::Grid),
+        palette,
+        f32::from(intensity.min(100)) / 100.0,
+    );
+    painter.text(
+        Pos2::new(rect.center().x, rect.bottom() - 3.0),
+        Align2::CENTER_BOTTOM,
+        truncate_flow_label(&title, 13),
+        FontId::proportional(9.0),
+        palette.text,
+    );
+    response.on_hover_text(title).clicked()
+}
+
+fn paint_background_preview(
+    painter: &egui::Painter,
+    rect: egui::Rect,
+    background: theme::CanvasBackground,
+    palette: theme::ThemeColors,
+    intensity: f32,
+) {
+    let color = |base: Color32, weight: f32| {
+        Color32::from_rgba_unmultiplied(
+            base.r(),
+            base.g(),
+            base.b(),
+            (255.0 * intensity * weight).clamp(0.0, 255.0) as u8,
+        )
+    };
+    let step = 12.0;
+    match background {
+        theme::CanvasBackground::Solid => {
+            painter.circle_filled(
+                Pos2::new(rect.left() + rect.width() * 0.28, rect.center().y),
+                rect.width() * 0.38,
+                color(palette.accent, 0.11),
+            );
+            painter.circle_filled(
+                Pos2::new(rect.right() - rect.width() * 0.22, rect.center().y),
+                rect.width() * 0.3,
+                color(palette.move_node, 0.08),
+            );
+        }
+        theme::CanvasBackground::Dots => {
+            let mut x = rect.left() + 5.0;
+            while x < rect.right() {
+                let mut y = rect.top() + 5.0;
+                while y < rect.bottom() {
+                    painter.circle_filled(Pos2::new(x, y), 1.0, color(palette.grid, 0.9));
+                    y += step;
+                }
+                x += step;
+            }
+        }
+        theme::CanvasBackground::Grid
+        | theme::CanvasBackground::Blueprint
+        | theme::CanvasBackground::Horizon => {
+            let spacing = if background == theme::CanvasBackground::Blueprint {
+                24.0
+            } else {
+                step
+            };
+            let mut x = rect.left();
+            while x <= rect.right() {
+                painter.line_segment(
+                    [Pos2::new(x, rect.top()), Pos2::new(x, rect.bottom())],
+                    Stroke::new(0.7_f32, color(palette.grid, 0.75)),
+                );
+                x += spacing;
+            }
+            let mut y = rect.top();
+            while y <= rect.bottom() {
+                painter.line_segment(
+                    [Pos2::new(rect.left(), y), Pos2::new(rect.right(), y)],
+                    Stroke::new(0.7_f32, color(palette.grid, 0.75)),
+                );
+                y += spacing;
+            }
+            if background == theme::CanvasBackground::Horizon {
+                painter.circle_filled(
+                    Pos2::new(rect.center().x, rect.center().y - 5.0),
+                    8.0,
+                    color(palette.warning, 0.75),
+                );
+            }
+        }
+        theme::CanvasBackground::Scanlines => {
+            let mut y = rect.top();
+            while y < rect.bottom() {
+                painter.line_segment(
+                    [Pos2::new(rect.left(), y), Pos2::new(rect.right(), y)],
+                    Stroke::new(1.0_f32, color(palette.accent, 0.3)),
+                );
+                y += 4.0;
+            }
+        }
+        theme::CanvasBackground::Hex => {
+            let radius = 5.0;
+            let mut x = rect.left() + radius;
+            let mut row = 0;
+            while x < rect.right() + radius {
+                let mut y = rect.top() + radius + if row % 2 == 0 { 0.0 } else { radius };
+                while y < rect.bottom() + radius {
+                    let points: Vec<Pos2> = (0..7)
+                        .map(|index| {
+                            let angle = std::f32::consts::PI / 3.0 * index as f32;
+                            Pos2::new(x + radius * angle.cos(), y + radius * angle.sin())
+                        })
+                        .collect();
+                    painter.add(egui::Shape::line(
+                        points,
+                        Stroke::new(0.6_f32, color(palette.grid, 0.8)),
+                    ));
+                    y += radius * 1.75;
+                }
+                row += 1;
+                x += radius * 2.0;
+            }
+        }
+        theme::CanvasBackground::Circuit => {
+            for y in [rect.top() + 7.0, rect.center().y, rect.bottom() - 7.0] {
+                painter.line_segment(
+                    [
+                        Pos2::new(rect.left() + 4.0, y),
+                        Pos2::new(rect.right() - 4.0, y),
+                    ],
+                    Stroke::new(0.9_f32, color(palette.grid, 0.85)),
+                );
+                for x in [rect.left() + 16.0, rect.center().x, rect.right() - 16.0] {
+                    painter.circle_filled(Pos2::new(x, y), 1.5, color(palette.accent, 0.8));
+                }
+            }
+        }
+        theme::CanvasBackground::Aurora => {
+            painter.circle_filled(
+                Pos2::new(rect.left() + rect.width() * 0.25, rect.center().y),
+                rect.width() * 0.34,
+                color(palette.accent, 0.16),
+            );
+            painter.circle_filled(
+                Pos2::new(rect.right() - rect.width() * 0.18, rect.center().y),
+                rect.width() * 0.32,
+                color(palette.move_node, 0.16),
+            );
+        }
+        theme::CanvasBackground::Stars => {
+            for (x, y) in [
+                (0.18, 0.23),
+                (0.37, 0.68),
+                (0.63, 0.31),
+                (0.82, 0.66),
+                (0.72, 0.82),
+            ] {
+                painter.circle_filled(
+                    Pos2::new(
+                        rect.left() + rect.width() * x,
+                        rect.top() + rect.height() * y,
+                    ),
+                    1.1,
+                    color(palette.text, 0.75),
+                );
+            }
+        }
+        theme::CanvasBackground::Matrix => {
+            for column in 0..6 {
+                for row in 0..4 {
+                    let x = rect.left() + 7.0 + column as f32 * 13.0;
+                    let y = rect.top() + 5.0 + row as f32 * 9.0;
+                    painter.text(
+                        Pos2::new(x, y),
+                        Align2::CENTER_CENTER,
+                        if (column + row) % 2 == 0 { "0" } else { "1" },
+                        FontId::monospace(7.0),
+                        color(palette.success, 0.72),
+                    );
+                }
+            }
+        }
+        theme::CanvasBackground::Hearts => {
+            for (center, radius, base) in [
+                (
+                    Pos2::new(rect.left() + 14.0, rect.top() + 13.0),
+                    3.4,
+                    palette.accent,
+                ),
+                (
+                    Pos2::new(rect.center().x, rect.bottom() - 10.0),
+                    4.0,
+                    palette.condition_node,
+                ),
+                (
+                    Pos2::new(rect.right() - 13.0, rect.top() + 15.0),
+                    3.2,
+                    palette.move_node,
+                ),
+            ] {
+                let heart = color(base, 0.45);
+                painter.circle_filled(
+                    center + Vec2::new(-radius * 0.48, -radius * 0.2),
+                    radius * 0.58,
+                    heart,
+                );
+                painter.circle_filled(
+                    center + Vec2::new(radius * 0.48, -radius * 0.2),
+                    radius * 0.58,
+                    heart,
+                );
+                painter.add(egui::Shape::convex_polygon(
+                    vec![
+                        center + Vec2::new(-radius, -radius * 0.05),
+                        center + Vec2::new(radius, -radius * 0.05),
+                        center + Vec2::new(0.0, radius * 1.25),
+                    ],
+                    heart,
+                    Stroke::NONE,
+                ));
+            }
+            for center in [
+                Pos2::new(rect.left() + 32.0, rect.center().y),
+                Pos2::new(rect.right() - 30.0, rect.bottom() - 7.0),
+            ] {
+                painter.line_segment(
+                    [center - Vec2::new(2.5, 0.0), center + Vec2::new(2.5, 0.0)],
+                    Stroke::new(0.8_f32, color(palette.warning, 0.8)),
+                );
+                painter.line_segment(
+                    [center - Vec2::new(0.0, 2.5), center + Vec2::new(0.0, 2.5)],
+                    Stroke::new(0.8_f32, color(palette.warning, 0.8)),
+                );
+            }
+        }
+        theme::CanvasBackground::Radar => {
+            for radius in [6.0, 12.0, 18.0] {
+                painter.circle_stroke(
+                    rect.center(),
+                    radius,
+                    Stroke::new(0.7_f32, color(palette.grid, 0.8)),
+                );
+            }
+            painter.line_segment(
+                [rect.left_center(), rect.right_center()],
+                Stroke::new(0.7_f32, color(palette.grid, 0.8)),
+            );
+            painter.line_segment(
+                [rect.center_top(), rect.center_bottom()],
+                Stroke::new(0.7_f32, color(palette.grid, 0.8)),
+            );
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1448,6 +1933,15 @@ mod tests {
         assert_eq!(
             validate_settings_file(&invalid_theme, &catalog),
             Err("invalid_theme")
+        );
+
+        let invalid_background = AppSettings {
+            canvas_background: "matrix-rain-unknown".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            validate_settings_file(&invalid_background, &catalog),
+            Err("invalid_background")
         );
 
         let invalid_accent = AppSettings {

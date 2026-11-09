@@ -156,6 +156,9 @@ pub struct FlowRunSummary {
 /// leaving held inputs pressed when an action is cancelled or returns an error.
 pub trait FlowHost {
     fn is_cancelled(&self) -> bool;
+    /// Observe a node before the interpreter handles it. The default is a no-op
+    /// so existing hosts and execution semantics remain unchanged.
+    fn node_started(&mut self, _node: &FlowNode) {}
     fn execute_action(&mut self, action: &Action) -> Result<(), String>;
     fn wait(&mut self, duration_ms: u64) -> Result<(), String>;
 }
@@ -586,6 +589,7 @@ pub fn execute_flow(
                 .get(current_id)
                 .copied()
                 .ok_or_else(|| format!("Flow reached missing node '{current_id}'."))?;
+            host.node_started(node);
             match &node.kind {
                 FlowNodeKind::Action {
                     action,
@@ -1181,12 +1185,16 @@ mod tests {
     struct FakeHost {
         actions: Vec<Action>,
         waits: Vec<u64>,
+        visited_nodes: Vec<String>,
         cancelled: Arc<AtomicBool>,
     }
 
     impl FlowHost for FakeHost {
         fn is_cancelled(&self) -> bool {
             self.cancelled.load(Ordering::Acquire)
+        }
+        fn node_started(&mut self, node: &FlowNode) {
+            self.visited_nodes.push(node.id.clone());
         }
         fn execute_action(&mut self, action: &Action) -> Result<(), String> {
             self.actions.push(action.clone());
@@ -1393,6 +1401,13 @@ mod tests {
         assert!(!summary.cancelled);
         assert_eq!(cycles, vec![1]);
         assert_eq!(host.actions.len(), 3);
+        assert_eq!(
+            host.visited_nodes,
+            vec![
+                "set", "check", "repeat", "click", "loop_end", "repeat", "click", "loop_end",
+                "repeat", "click", "loop_end", "repeat", "end"
+            ]
+        );
     }
 
     #[test]
